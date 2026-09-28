@@ -16,7 +16,7 @@ import {
   type StudentExam,
   type SubmitResult,
 } from '@linuxlab/shared';
-import { createHttpClient, createReporter, openTerminal, ORIGIN } from './lib/testClient.js';
+import { createHttpClient, createReporter, openTerminal, ORIGIN, startStudent } from './lib/testClient.js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:3001';
 const dbPath = process.argv[3];
@@ -30,9 +30,9 @@ const Q = {
   perm: 'q5-permissions',
 };
 
-async function startStudent() {
+async function beginExam() {
   const http = createHttpClient(base);
-  const session = await http.call<SessionResponse>('POST', '/api/session');
+  const session = await startStudent(http);
   const exam = (await http.call<StudentExam>('GET', '/api/exam')).body;
   const term = openTerminal(base, { Origin: ORIGIN, Cookie: http.cookie });
   await term.opened;
@@ -49,7 +49,7 @@ async function startStudent() {
 
 async function practiceMode(): Promise<void> {
   console.log('--- Practice mode ---');
-  const s = await startStudent();
+  const s = await beginExam();
   let attempt = (await s.http.call<AttemptView>('GET', '/api/attempt')).body;
   const minutesLeft = (Date.parse(attempt.deadlineAt ?? '') - Date.parse(attempt.serverTime)) / 60_000;
   report(s.session.resumed === false && attempt.status === 'in_progress', 'New attempt started');
@@ -89,7 +89,7 @@ async function practiceMode(): Promise<void> {
 
   if (dbPath) {
     console.log('\n--- Time limit ---');
-    const t = await startStudent();
+    const t = await beginExam();
     const attemptId = (await t.http.call<AttemptView>('GET', '/api/attempt')).body.id;
     const db = new DatabaseSync(dbPath);
     db.prepare('UPDATE exam_attempts SET deadline_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), attemptId);
@@ -104,7 +104,7 @@ async function practiceMode(): Promise<void> {
 
 async function examMode(): Promise<void> {
   console.log('--- Exam mode ---');
-  const s = await startStudent();
+  const s = await beginExam();
   report(!s.exam.questions.some((q) => q.hint), 'No hints are sent in exam mode');
   const attempt = (await s.http.call<AttemptView>('GET', '/api/attempt')).body;
   report(attempt.score === null, 'Score hidden during the exam');
@@ -125,7 +125,7 @@ async function examMode(): Promise<void> {
 async function main(): Promise<void> {
   const exam = (await (async () => {
     const http = createHttpClient(base);
-    await http.call('POST', '/api/session');
+    await startStudent(http);
     return (await http.call<StudentExam>('GET', '/api/exam')).body;
   })());
   if (exam.mode === 'exam') await examMode();

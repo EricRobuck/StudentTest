@@ -336,3 +336,15 @@ is typed once in `packages/shared`.
     CSP in `vite.config.ts`; 16 KB JSON limit with clean 413/400 errors;
     `Secure` cookies automatic over HTTPS; student text JSON-quoted in logs.
   - Verified by `npm run smoke:security` (21 attack checks) + all earlier suites.
+- **Student name and class** (after Phase 10).
+  - Start screen before the exam: name + class, validated by
+    `validateStudentInfo` in `packages/shared/src/student.ts` (same rules in
+    the browser and on the server). `CLASS_LIST` in `.env` turns the class
+    field into a dropdown; unset = free text.
+  - `POST /api/session` now only resumes (401 `NO_SESSION` → start screen);
+    `POST /api/session/start` creates the attempt/container (rate-limited,
+    idempotent while an exam is running); `GET /api/classes`. Practice
+    retakes keep the name and class.
+  - Stored on `exam_attempts` (migration 4: `student_name`, `class_name`);
+    shown in the exam header, results, and instructor pages (class filter,
+    name search). Self-reported, not authentication — see SECURITY.md R1.

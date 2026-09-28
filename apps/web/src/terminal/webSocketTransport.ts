@@ -68,7 +68,7 @@ export function createWebSocketTransport(): TerminalTransport {
     handlers.onStatus('connecting', attempt === 0 ? 'starting your Linux environment…' : 'reconnecting…');
 
     try {
-      const session = await api.startSession();
+      const session = await api.resumeSession();
       if (disposed) return;
       if (session.attemptStatus === 'completed') {
         handlers.onStatus('disconnected', 'the exam has ended');

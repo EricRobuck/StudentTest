@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { AttemptStatus } from '@linuxlab/shared';
+import type { AttemptStatus, StudentInfo } from '@linuxlab/shared';
 import type { AttemptService } from '../attempts/attemptService.js';
 import type { ContainerRuntime } from '../containers/index.js';
 import type { Repositories, SessionRecord } from '../db/index.js';
@@ -20,6 +20,15 @@ export interface ExamSession {
 }
 
 export type EnvironmentEndReason = 'idle' | 'environment-lost' | 'exam-over';
+
+export interface SessionResult {
+  session: ExamSession;
+  token: string;
+  resumed: boolean;
+  attemptStatus: AttemptStatus;
+  environmentReset: boolean;
+  student: StudentInfo;
+}
 
 /** Don't write last-activity to the database more often than this per session. */
 const TOUCH_INTERVAL_MS = 30_000;
@@ -45,39 +54,55 @@ export class SessionManager {
   }
 
   /**
-   * Resumes the caller's session, or starts a new attempt + session + container.
-   * For an in-progress attempt whose container has gone (idle timeout, crash),
-   * a fresh container is created and environmentReset is reported.
+   * Resumes the caller's session. Returns undefined if there is none (the
+   * browser should show the start screen). For an in-progress attempt whose
+   * container has gone (idle timeout, crash), a fresh container is created
+   * and environmentReset is reported.
    */
-  async resumeOrCreate(token: string | undefined): Promise<{
-    session: ExamSession;
-    token: string;
-    resumed: boolean;
-    attemptStatus: AttemptStatus;
-    environmentReset: boolean;
-  }> {
+  async resume(token: string | undefined): Promise<SessionResult | undefined> {
     const existing = token ? await this.repos.sessions.findByTokenHash(hashToken(token)) : undefined;
-    if (existing && token) {
-      const attempt = await this.attempts.get(existing.attemptId);
-      if (attempt?.status === 'completed') {
-        return { session: toSession(existing), token, resumed: true, attemptStatus: 'completed', environmentReset: false };
-      }
-      if (attempt) {
-        if (existing.containerId && (await this.runtime.isRunning(existing.containerId))) {
-          await this.touch(existing.id, true);
-          return { session: toSession(existing), token, resumed: true, attemptStatus: 'in_progress', environmentReset: false };
-        }
-        if (existing.containerId) await this.endEnvironment(existing.id, 'environment-lost');
-        const container = await this.runtime.createSessionContainer(existing.id);
-        await this.repos.sessions.setContainer(existing.id, container.containerId, container.name);
-        await this.touch(existing.id, true);
-        console.log(`[sessions] new environment for session ${existing.id} → ${container.name}`);
-        const session = { ...toSession(existing), containerId: container.containerId, containerName: container.name };
-        return { session, token, resumed: true, attemptStatus: 'in_progress', environmentReset: true };
-      }
-    }
+    if (!existing || !token) return undefined;
+    const attempt = await this.attempts.get(existing.attemptId);
+    if (!attempt) return undefined;
+    const student = { name: attempt.studentName ?? '', className: attempt.className ?? '' };
+    const base = { token, resumed: true, student };
 
-    const attempt = await this.attempts.start(this.activeExam());
+    if (attempt.status === 'completed') {
+      return { ...base, session: toSession(existing), attemptStatus: 'completed', environmentReset: false };
+    }
+    if (existing.containerId && (await this.runtime.isRunning(existing.containerId))) {
+      await this.touch(existing.id, true);
+      return { ...base, session: toSession(existing), attemptStatus: 'in_progress', environmentReset: false };
+    }
+    if (existing.containerId) await this.endEnvironment(existing.id, 'environment-lost');
+    const container = await this.runtime.createSessionContainer(existing.id);
+    await this.repos.sessions.setContainer(existing.id, container.containerId, container.name);
+    await this.touch(existing.id, true);
+    console.log(`[sessions] new environment for session ${existing.id} → ${container.name}`);
+    const session = { ...toSession(existing), containerId: container.containerId, containerName: container.name };
+    return { ...base, session, attemptStatus: 'in_progress', environmentReset: true };
+  }
+
+  /** The student of the caller's current attempt (e.g. to keep it for a practice retake). */
+  async studentOf(attemptId: string): Promise<StudentInfo | undefined> {
+    const attempt = await this.attempts.get(attemptId);
+    return attempt?.studentName && attempt.className ? { name: attempt.studentName, className: attempt.className } : undefined;
+  }
+
+  /**
+   * For an attempt that began before names were asked: record the student
+   * on it (only if it has none yet) and return the updated session.
+   */
+  async nameUnnamedAttempt(token: string, student: StudentInfo): Promise<SessionResult | undefined> {
+    const current = await this.resume(token);
+    if (!current || current.student.name) return current;
+    await this.repos.attempts.setStudent(current.session.attemptId, student.name, student.className);
+    return { ...current, student };
+  }
+
+  /** Starts a new attempt, session (new cookie token) and container for a student. */
+  async start(student: StudentInfo): Promise<SessionResult> {
+    const attempt = await this.attempts.start(this.activeExam(), student);
     const newToken = randomBytes(32).toString('base64url');
     const id = randomUUID();
     const container = await this.runtime.createSessionContainer(id);
@@ -93,7 +118,14 @@ export class SessionManager {
     };
     await this.repos.sessions.create(record);
     console.log(`[sessions] created session ${id} (attempt ${attempt.id}) → ${container.name}`);
-    return { session: toSession(record), token: newToken, resumed: false, attemptStatus: 'in_progress', environmentReset: false };
+    return {
+      session: toSession(record),
+      token: newToken,
+      resumed: false,
+      attemptStatus: 'in_progress',
+      environmentReset: false,
+      student,
+    };
   }
 
   /** Records activity. Throttled so keystrokes don't hammer the database. */

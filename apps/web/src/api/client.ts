@@ -3,10 +3,12 @@ import type {
   AttemptDetail,
   AttemptSummary,
   AttemptView,
+  ClassListResponse,
   ExamResultView,
   HealthResponse,
   InstructorStatus,
   SessionResponse,
+  StartSessionRequest,
   StudentExam,
   SubmitResult,
 } from '@linuxlab/shared';
@@ -55,13 +57,22 @@ let sessionInFlight: Promise<SessionResponse> | null = null;
 export const api = {
   health: (signal?: AbortSignal) => request<HealthResponse>('GET', '/api/health', { signal }),
 
-  /** Resumes this browser's exam session or starts a new attempt (creates its container). */
-  startSession(): Promise<SessionResponse> {
+  /**
+   * Resumes this browser's exam session. Rejects with status 401 / code
+   * NO_SESSION when there is none yet (show the start screen).
+   */
+  resumeSession(): Promise<SessionResponse> {
     sessionInFlight ??= request<SessionResponse>('POST', '/api/session').finally(() => {
       sessionInFlight = null;
     });
     return sessionInFlight;
   },
+
+  /** The start screen: begins the exam for this student (creates their Linux environment). */
+  startSession: (student: StartSessionRequest) =>
+    request<SessionResponse>('POST', '/api/session/start', { body: student }),
+
+  classes: (signal?: AbortSignal) => request<ClassListResponse>('GET', '/api/classes', { signal }),
 
   /** The student's exam (questions only; answers never leave the server). */
   exam: (signal?: AbortSignal) => request<StudentExam>('GET', '/api/exam', { signal }),

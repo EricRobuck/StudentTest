@@ -108,6 +108,8 @@ export interface AttemptView {
 /** Response body of GET /api/attempt/result (after completion). */
 export interface ExamResultView {
   examTitle: string;
+  studentName: string | null;
+  className: string | null;
   startedAt: string;
   completedAt: string;
   endReason: AttemptEndReason;

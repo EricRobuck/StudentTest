@@ -5,7 +5,7 @@
 //   npm run smoke:terminal -- http://127.0.0.1:3101
 
 import { TERMINAL_CLOSE, type SessionResponse } from '@linuxlab/shared';
-import { createReporter, openTerminal as open, ORIGIN } from './lib/testClient.js';
+import { createHttpClient, createReporter, openTerminal as open, ORIGIN, startStudent } from './lib/testClient.js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:3001';
 const { report, finish } = createReporter();
@@ -14,20 +14,25 @@ const openTerminal = (headers: Record<string, string>) => open(base, headers);
 async function main(): Promise<void> {
   console.log(`Testing ${base}\n`);
 
-  // 1. Session creation sets an httpOnly cookie.
-  const res = await fetch(`${base}/api/session`, { method: 'POST', headers: { Origin: ORIGIN } });
-  const setCookie = res.headers.get('set-cookie') ?? '';
-  const body = (await res.json()) as SessionResponse;
-  report(res.ok && body.resumed === false, 'POST /api/session creates a new session', `${res.status} ${JSON.stringify(body)}`);
-  report(/HttpOnly/i.test(setCookie) && /SameSite=Strict/i.test(setCookie), 'Session cookie is HttpOnly + SameSite=Strict', setCookie);
-  const cookie = setCookie.split(';')[0]!;
+  // 1. Starting an exam (the start screen) sets an httpOnly cookie.
+  const http = createHttpClient(base);
+  const started = await startStudent(http);
+  const body = started.body;
+  report(started.status === 200 && body.resumed === false, 'Start screen creates a new session', `${started.status} ${JSON.stringify(body)}`);
+  report(/HttpOnly/i.test(started.setCookie) && /SameSite=Strict/i.test(started.setCookie),
+    'Session cookie is HttpOnly + SameSite=Strict', started.setCookie);
+  const cookie = http.cookie;
 
   // 2. Resuming with the same cookie returns the same session.
   const again = (await (await fetch(`${base}/api/session`, { method: 'POST', headers: { Origin: ORIGIN, Cookie: cookie } })).json()) as SessionResponse;
   report(again.sessionId === body.sessionId && again.resumed, 'Same cookie resumes the same session');
 
   // 3. Security: foreign origin and missing cookie are refused.
-  const foreignPost = await fetch(`${base}/api/session`, { method: 'POST', headers: { Origin: 'https://evil.example' } });
+  const foreignPost = await fetch(`${base}/api/session/start`, {
+    method: 'POST',
+    headers: { Origin: 'https://evil.example', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Mallory', className: 'CS120-TEST' }),
+  });
   report(foreignPost.status === 403, 'POST from a foreign website is refused (403)', String(foreignPost.status));
 
   const foreign = openTerminal({ Origin: 'https://evil.example', Cookie: cookie });

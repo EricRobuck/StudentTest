@@ -8,7 +8,11 @@ import type { AttemptEndReason, AttemptStatus } from '@linuxlab/shared';
 export interface AttemptRecord {
   id: string;
   examId: string;
+  /** Reserved for real student accounts. */
   studentId: string | null;
+  /** Self-reported on the start screen. */
+  studentName: string | null;
+  className: string | null;
   status: AttemptStatus;
   endReason: AttemptEndReason | null;
   startedAt: string;
@@ -66,6 +70,8 @@ export interface AttemptRepository {
   get(id: string): Promise<AttemptRecord | undefined>;
   questions(attemptId: string): Promise<AttemptQuestionRecord[]>;
   setCurrentQuestion(id: string, questionId: string): Promise<void>;
+  /** Records who is taking an attempt that started without a name. */
+  setStudent(id: string, studentName: string, className: string): Promise<void>;
   /** Marks the attempt completed; returns false if it was already completed. */
   complete(id: string, reason: AttemptEndReason, completedAt: string): Promise<boolean>;
   /** In-progress attempts whose deadline has passed. */

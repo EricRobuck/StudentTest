@@ -6,6 +6,7 @@ import { ExamProgress } from './components/ExamProgress';
 import { ExamTimer } from './components/ExamTimer';
 import { QuestionPanel } from './components/QuestionPanel';
 import { ResultsView } from './components/ResultsView';
+import { StartScreen } from './components/StartScreen';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useExamSession } from './hooks/useExamSession';
 import { TerminalView } from './terminal/TerminalView';
@@ -22,11 +23,12 @@ export function App() {
       <header className="exam-header">
         <div>
           <h1>{state.kind === 'in_progress' ? state.exam.title : 'Linux Practical Exam'}</h1>
-          <p className="muted">
-            {state.kind === 'in_progress'
-              ? `${state.exam.questions.length} questions · ${state.exam.totalPoints} points · ${state.exam.mode} mode`
-              : 'Student: (sign-in arrives in a later phase)'}
-          </p>
+          {state.kind === 'in_progress' && (
+            <p className="muted">
+              <strong className="student-name">{state.student.name}</strong> · {state.student.className} ·{' '}
+              {state.exam.questions.length} questions · {state.exam.totalPoints} points · {state.exam.mode} mode
+            </p>
+          )}
         </div>
         {state.kind === 'in_progress' && (
           <div className="header-right">
@@ -43,7 +45,11 @@ export function App() {
         )}
       </header>
 
-      {state.kind === 'completed' ? (
+      {state.kind === 'start' ? (
+        <main className="exam-body exam-body-single">
+          <StartScreen onStarted={reload} />
+        </main>
+      ) : state.kind === 'completed' ? (
         <main className="exam-body exam-body-single">
           <ResultsView
             result={state.result}

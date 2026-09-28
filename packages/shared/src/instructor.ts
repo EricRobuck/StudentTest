@@ -13,6 +13,9 @@ export interface InstructorStatus {
 
 export interface AttemptSummary {
   id: string;
+  /** Self-reported on the start screen (null for attempts from before it existed). */
+  studentName: string | null;
+  className: string | null;
   examId: string;
   examTitle: string;
   status: AttemptStatus;

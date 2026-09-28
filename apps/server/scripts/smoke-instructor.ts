@@ -5,7 +5,7 @@
 // The backend must be started with the same INSTRUCTOR_PASSWORD.
 
 import type { AttemptDetail, AttemptSummary, AttemptView, InstructorStatus } from '@linuxlab/shared';
-import { createHttpClient, createReporter, openTerminal, ORIGIN } from './lib/testClient.js';
+import { createHttpClient, createReporter, openTerminal, ORIGIN, startStudent } from './lib/testClient.js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:3001';
 const password = process.argv[3] ?? '';
@@ -20,7 +20,7 @@ async function main(): Promise<void> {
 
   // A student's session cookie must not unlock instructor data.
   const student = createHttpClient(base);
-  await student.call('POST', '/api/session');
+  await startStudent(student, 'Ada Lovelace');
   report((await student.call('GET', '/api/instructor/attempts')).status === 401, 'Student session cannot see instructor data');
 
   const foreign = await fetch(`${base}/api/instructor/login`, {
@@ -64,6 +64,7 @@ async function main(): Promise<void> {
   const row = list.find((a) => a.id === attemptId);
   report(row?.status === 'completed' && row.score.earned === 20 && row.commandCount >= 2, 'Attempt listed: finished, 20/50, commands counted',
     JSON.stringify(row));
+  report(row?.studentName === 'Ada Lovelace' && !!row.className, `Attempt shows the student's name and class (${row?.studentName}, ${row?.className})`);
 
   let detail: AttemptDetail | undefined;
   for (let i = 0; i < 40; i++) {

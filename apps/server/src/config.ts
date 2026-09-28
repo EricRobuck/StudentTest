@@ -40,6 +40,16 @@ function readList(name: string, fallback: string[]): string[] {
 
 const webUrl = process.env.WEB_URL || 'http://127.0.0.1:5173';
 
+function readClassList(): string[] | null {
+  const classes = [...new Set(readList('CLASS_LIST', []))];
+  for (const c of classes) {
+    if (c.length > 40 || !/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(c)) {
+      throw new Error(`CLASS_LIST entry "${c}" must be letters, numbers, spaces, . _ - (max 40 characters)`);
+    }
+  }
+  return classes.length > 0 ? classes : null;
+}
+
 function readInstructorPassword(): string | undefined {
   const value = process.env.INSTRUCTOR_PASSWORD;
   if (!value) return undefined; // instructor pages disabled
@@ -97,6 +107,10 @@ export const config = {
 
   // SQLite file. Default: <repo>/data/linuxlab.sqlite (git-ignored).
   databasePath,
+
+  // Classes students choose from on the start screen, e.g.
+  // CLASS_LIST=CS120-01,CS120-02. Unset = students type their class.
+  classes: readClassList(),
 
   // 'practice' (default) or 'exam': which settings the sample exam runs with.
   sampleExamMode: process.env.SAMPLE_EXAM_MODE === 'exam' ? ('exam' as const) : ('practice' as const),

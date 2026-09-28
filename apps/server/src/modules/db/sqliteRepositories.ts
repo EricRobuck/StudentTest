@@ -19,6 +19,8 @@ function toAttempt(r: Row): AttemptRecord {
     id: str(r.id),
     examId: str(r.exam_id),
     studentId: strOrNull(r.student_id),
+    studentName: strOrNull(r.student_name),
+    className: strOrNull(r.class_name),
     status: str(r.status) as AttemptStatus,
     endReason: strOrNull(r.end_reason) as AttemptEndReason | null,
     startedAt: str(r.started_at),
@@ -61,10 +63,22 @@ export function createSqliteRepositories(db: Database): Repositories {
       async create(a, questions) {
         inTransaction(db, () => {
           db.prepare(
-            `INSERT INTO exam_attempts (id, exam_id, student_id, status, end_reason, started_at,
-               deadline_at, completed_at, current_question_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          ).run(a.id, a.examId, a.studentId, a.status, a.endReason, a.startedAt, a.deadlineAt, a.completedAt, a.currentQuestionId);
+            `INSERT INTO exam_attempts (id, exam_id, student_id, student_name, class_name, status, end_reason,
+               started_at, deadline_at, completed_at, current_question_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            a.id,
+            a.examId,
+            a.studentId,
+            a.studentName,
+            a.className,
+            a.status,
+            a.endReason,
+            a.startedAt,
+            a.deadlineAt,
+            a.completedAt,
+            a.currentQuestionId,
+          );
           const insertQuestion = db.prepare(
             `INSERT INTO attempt_questions (attempt_id, question_id, position, max_points, variables)
              VALUES (?, ?, ?, ?, ?)`,
@@ -90,6 +104,12 @@ export function createSqliteRepositories(db: Database): Repositories {
               variables: JSON.parse(str(r.variables)) as Record<string, string>,
             }),
           );
+      },
+      async setStudent(id, studentName, className) {
+        // Only fills in a missing name: an attempt's student can't be changed later.
+        db.prepare(
+          'UPDATE exam_attempts SET student_name = ?, class_name = ? WHERE id = ? AND student_name IS NULL',
+        ).run(studentName, className, id);
       },
       async setCurrentQuestion(id, questionId) {
         db.prepare('UPDATE exam_attempts SET current_question_id = ? WHERE id = ?').run(questionId, id);

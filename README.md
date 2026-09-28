@@ -58,6 +58,12 @@ by starting the backend with `SAMPLE_EXAM_MODE=exam` (PowerShell:
 Exam data is stored in `data/linuxlab.sqlite` (git-ignored). Delete that file
 to start completely fresh.
 
+## Students
+
+Students open http://127.0.0.1:5173, enter their name and class, and click
+**Start exam**. To offer a fixed list of classes instead of a text box, add
+`CLASS_LIST=CS120-01,CS120-02` (your sections) to `.env`.
+
 ## Instructor pages
 
 Open http://127.0.0.1:5173/instructor. Access needs `INSTRUCTOR_PASSWORD`

@@ -92,6 +92,8 @@ export class InstructorService {
       id: attempt.id,
       examId: exam.id,
       examTitle: exam.title,
+      studentName: attempt.studentName,
+      className: attempt.className,
       status: attempt.status,
       endReason: attempt.endReason,
       startedAt: attempt.startedAt,

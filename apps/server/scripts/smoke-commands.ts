@@ -7,7 +7,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { AttemptView } from '@linuxlab/shared';
 import { CommandMarkerParser } from '../src/modules/terminal/commandMarkers.js';
-import { createHttpClient, createReporter, openTerminal, ORIGIN } from './lib/testClient.js';
+import { createHttpClient, createReporter, openTerminal, ORIGIN, startStudent } from './lib/testClient.js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:3001';
 const dbPath = process.argv[3];
@@ -57,7 +57,7 @@ async function endToEnd(): Promise<void> {
   console.log('\n--- End to end ---');
   if (!dbPath) throw new Error('usage: smoke-commands <baseUrl> <databasePath>');
   const http = createHttpClient(base);
-  await http.call('POST', '/api/session');
+  await startStudent(http);
   const attempt = (await http.call<AttemptView>('GET', '/api/attempt')).body;
   const term = openTerminal(base, { Origin: ORIGIN, Cookie: http.cookie });
   await term.opened;

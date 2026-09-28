@@ -35,6 +35,12 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
         </div>
       )}
       <h2>{result.examTitle}</h2>
+      {result.studentName && (
+        <p className="results-student">
+          Student: <strong>{result.studentName}</strong>
+          {result.className && <> · {result.className}</>}
+        </p>
+      )}
       <p className="muted">
         {result.endReason === 'time_expired' ? 'Time ran out — your exam was submitted automatically.' : 'Exam finished.'}{' '}
         Completed {new Date(result.completedAt).toLocaleString()}.

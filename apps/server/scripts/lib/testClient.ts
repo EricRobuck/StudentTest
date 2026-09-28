@@ -70,6 +70,18 @@ export function openTerminal(base: string, headers: Record<string, string>) {
   };
 }
 
+/**
+ * The start screen: begins an exam as a test student. Uses a class from the
+ * server's CLASS_LIST when one is configured.
+ */
+export async function startStudent(http: ReturnType<typeof createHttpClient>, name = 'Test Student') {
+  const { body } = await http.call<{ classes: string[] | null }>('GET', '/api/classes');
+  return http.call<import('@linuxlab/shared').SessionResponse>('POST', '/api/session/start', {
+    name,
+    className: body.classes?.[0] ?? 'CS120-TEST',
+  });
+}
+
 /** A browser-like HTTP client that keeps the session cookie. */
 export function createHttpClient(base: string) {
   let cookie = '';

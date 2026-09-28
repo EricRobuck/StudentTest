@@ -253,6 +253,61 @@ button.danger {
   padding: 1.5rem;
 }
 
+.start-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 460px;
+  width: 100%;
+  margin: 2rem auto;
+}
+
+.start-card label {
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin-top: 0.75rem;
+}
+
+.start-card label:first-child {
+  margin-top: 0;
+}
+
+.start-card input,
+.start-card select {
+  font: inherit;
+  padding: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.start-card input[aria-invalid='true'],
+.start-card select[aria-invalid='true'] {
+  border-color: var(--bad);
+}
+
+.start-card button[type='submit'] {
+  margin-top: 1rem;
+}
+
+.field-error {
+  color: var(--bad);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.student-name {
+  color: var(--text);
+}
+
+.results-student {
+  margin: 0.25rem 0;
+}
+
 .results-actions {
   display: flex;
   flex-wrap: wrap;
@@ -456,6 +511,23 @@ button.danger {
 
 .panel h4 {
   margin: 1.25rem 0 0.5rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.filters select,
+.filters input {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
 }
 
 .login-card {

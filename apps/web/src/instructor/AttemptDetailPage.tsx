@@ -8,7 +8,7 @@ import type {
 } from '@linuxlab/shared';
 import { instructorApi } from '../api/client';
 import { TaskText } from '../components/TaskText';
-import { StatusBadge } from './AttemptsPage';
+import { StatusBadge, StudentLabel } from './AttemptsPage';
 import { formatDateTime, formatSeconds, formatTime, printable } from './format';
 
 export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; onBack: () => void }) {
@@ -39,11 +39,16 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
       <section className="panel">
         <div className="section-head">
           <h2>
-            {s.examTitle} <span className="mono muted">#{s.id.slice(0, 8)}</span>
+            <StudentLabel summary={s} />
+            {s.className && <span className="muted"> · {s.className}</span>}
           </h2>
           <StatusBadge summary={s} />
         </div>
         <dl className="facts">
+          <dt>Exam</dt>
+          <dd>
+            {s.examTitle} <span className="mono muted">(attempt #{s.id.slice(0, 8)})</span>
+          </dd>
           <dt>Score</dt>
           <dd>
             <strong>

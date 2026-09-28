@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { AttemptView } from '@linuxlab/shared';
 import { config } from '../src/config.js';
 import { createDockerRuntime, type ExecOptions } from '../src/modules/containers/index.js';
-import { createHttpClient, createReporter, openTerminal, ORIGIN } from './lib/testClient.js';
+import { createHttpClient, createReporter, openTerminal, ORIGIN, startStudent } from './lib/testClient.js';
 
 const base = process.argv[2];
 const dbPath = process.argv[3];
@@ -82,16 +82,22 @@ async function serverAttacks(): Promise<void> {
 
   // The student used for the later checks (created before the limit is used up).
   const student = createHttpClient(base);
-  const first = await student.call('POST', '/api/session');
+  const first = await startStudent(student);
   if (first.status !== 200) {
     report(false, `Could not create a session for the checks (${first.status})`);
     return;
   }
   const attemptId = (await student.call<AttemptView>('GET', '/api/attempt')).body.id;
 
+  // Start-screen input is validated on the server, not just in the browser.
+  const bad = await createHttpClient(base).call('POST', '/api/session/start', { name: '<script>x</script>', className: '' });
+  report(bad.status === 400, 'Invalid name/class is refused by the server (400)');
+  const noSession = await createHttpClient(base).call('POST', '/api/session');
+  report(noSession.status === 401, 'Loading the page without a session creates nothing (401 → start screen)');
+
   // Container creation is the expensive, abusable operation.
   const statuses: number[] = [];
-  for (let i = 0; i < 7; i++) statuses.push((await createHttpClient(base).call('POST', '/api/session')).status);
+  for (let i = 0; i < 7; i++) statuses.push((await startStudent(createHttpClient(base))).status);
   report(statuses.includes(429), `Creating many new sessions from one address is rate limited (${statuses.join(',')})`);
   report((await student.call('POST', '/api/session')).status === 200, 'Resuming an existing session is never rate limited');
 

@@ -5,6 +5,7 @@ import type {
   ExamResultView,
   QuestionProgress,
   ScoreView,
+  StudentInfo,
 } from '@linuxlab/shared';
 import type { AttemptRecord, Repositories, SubmissionRecord } from '../db/index.js';
 import { orderedQuestions } from '../exams/examService.js';
@@ -32,13 +33,15 @@ export class AttemptService {
     this.completedListeners.push(listener);
   }
 
-  async start(exam: ExamDefinition, now = new Date()): Promise<AttemptRecord> {
+  async start(exam: ExamDefinition, student: StudentInfo, now = new Date()): Promise<AttemptRecord> {
     const questions = orderedQuestions(exam);
     const limit = exam.settings.timeLimitMinutes;
     const attempt: AttemptRecord = {
       id: randomUUID(),
       examId: exam.id,
       studentId: null,
+      studentName: student.name,
+      className: student.className,
       status: 'in_progress',
       endReason: null,
       startedAt: now.toISOString(),
@@ -167,6 +170,8 @@ export class AttemptService {
     const score = this.score(exam, subs);
     return {
       examTitle: exam.title,
+      studentName: attempt.studentName,
+      className: attempt.className,
       startedAt: attempt.startedAt,
       completedAt: attempt.completedAt ?? new Date().toISOString(),
       endReason: attempt.endReason ?? 'finished',

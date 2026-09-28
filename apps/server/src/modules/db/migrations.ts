@@ -114,4 +114,14 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 4,
+    name: 'student name and class',
+    sql: `
+      -- Self-reported on the start screen. student_id stays reserved for real accounts.
+      ALTER TABLE exam_attempts ADD COLUMN student_name TEXT;
+      ALTER TABLE exam_attempts ADD COLUMN class_name TEXT;
+      CREATE INDEX exam_attempts_class ON exam_attempts(class_name);
+    `,
+  },
 ];
