@@ -1,4 +1,4 @@
-import type { ApiError, HealthResponse, SessionResponse } from '@linuxlab/shared';
+import type { ApiError, HealthResponse, SessionResponse, StudentExam } from '@linuxlab/shared';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -38,4 +38,7 @@ export const api = {
     });
     return sessionInFlight;
   },
+
+  /** The student's exam (questions only; answers never leave the server). */
+  exam: (signal?: AbortSignal) => request<StudentExam>('GET', '/api/exam', signal),
 };

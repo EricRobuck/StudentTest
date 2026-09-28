@@ -3,6 +3,7 @@ import type { ApiError } from '@linuxlab/shared';
 import { config } from './config.js';
 import type { ContainerRuntime } from './modules/containers/index.js';
 import type { SessionManager } from './modules/sessions/sessionManager.js';
+import { examRouter } from './routes/exam.js';
 import { healthRouter } from './routes/health.js';
 import { sessionRouter } from './routes/session.js';
 
@@ -20,6 +21,7 @@ export function createApp({ runtime, sessions }: AppDeps): Express {
 
   app.use('/api', healthRouter(runtime));
   app.use('/api', sessionRouter(sessions));
+  app.use('/api', examRouter(sessions));
 
   // The backend only serves /api and /ws. Anyone who opens it directly in a
   // browser is sent to the web app instead of seeing "Cannot GET /".

@@ -224,3 +224,16 @@ is typed once in `packages/shared`.
     reaper removes them. Phase 7 persists sessions.
   - Not yet: login (any browser gets a session), rate limiting on
     `POST /api/session` (the `maxConcurrent` cap is the only brake).
+- **Phase 5** — Five sample questions.
+  - Question/validator/setup contracts in `packages/shared/src/exam.ts`
+    (`ValidatorSpec` union, `ValidationSpec {mode: all|any}`, `SetupStep`).
+  - Server-side definitions (`modules/exams/`): `ExamDefinition`,
+    `QuestionDefinition` (incl. `labType` for future lab plug-ins), the
+    hard-coded `sampleExam`, and `toStudentExam()` — an allow-list
+    projection that is the only path from exam data to the browser.
+  - `GET /api/exam` requires a session (`http/requireSession.ts`).
+  - UI: progress steps, question panel (points, category, instructions,
+    optional hint, Previous/Next). Current question is kept in
+    sessionStorage until Phase 7 moves progress to the server.
+  - The public repo contains the sample answers; real exams must live in
+    the database, not in source.

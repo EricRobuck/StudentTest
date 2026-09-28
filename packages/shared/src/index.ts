@@ -4,4 +4,5 @@
 // every incoming payload at runtime; these types are not a security boundary.
 
 export * from './api.js';
+export * from './exam.js';
 export * from './terminal.js';
