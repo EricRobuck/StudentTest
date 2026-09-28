@@ -3,8 +3,8 @@ import type { ContainerRuntime } from './types.js';
 export interface ReapOptions {
   /** Hard lifetime cap for any container. */
   maxAgeMs: number;
-  /** Whether a live session still owns this container. */
-  isOwned: (containerId: string) => boolean;
+  /** Containers a live session still owns. */
+  ownedContainerIds: () => Promise<Set<string>>;
   /**
    * Unowned containers younger than this are left alone, so a container that
    * is still being created and registered is never removed by mistake.
@@ -18,12 +18,14 @@ export interface ReapOptions {
  * even if the server crashed or a session was never closed.
  */
 export async function reap(runtime: ContainerRuntime, opts: ReapOptions): Promise<number> {
+  const containers = await runtime.listManaged();
+  const owned = await opts.ownedContainerIds();
   const now = Date.now();
   let removed = 0;
-  for (const c of await runtime.listManaged()) {
+  for (const c of containers) {
     const age = now - c.createdAt.getTime();
     const expired = age > opts.maxAgeMs;
-    const orphaned = !opts.isOwned(c.containerId) && age > opts.orphanGraceMs;
+    const orphaned = !owned.has(c.containerId) && age > opts.orphanGraceMs;
     if (expired || orphaned) {
       await runtime.destroy(c.containerId);
       console.log(`[containers] removed ${expired ? 'expired' : 'orphaned'} container ${c.name}`);

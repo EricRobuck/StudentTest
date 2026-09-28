@@ -15,8 +15,8 @@ const USER_FACING: Partial<Record<ContainerError['code'], number>> = {
 export function sessionRouter(sessions: SessionManager): Router {
   const router = Router();
 
-  // POST /api/session — resume this browser's exam session, or start one
-  // (which creates its Linux container). Called before opening the terminal.
+  // POST /api/session — resume this browser's exam session, or start a new
+  // attempt (which creates its Linux container). Called before anything else.
   router.post('/session', requireAllowedOrigin(config.security.allowedOrigins), async (req, res, next) => {
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
     try {
@@ -29,7 +29,12 @@ export function sessionRouter(sessions: SessionManager): Router {
           path: '/',
         });
       }
-      const body: SessionResponse = { sessionId: result.session.id, resumed: result.resumed };
+      const body: SessionResponse = {
+        sessionId: result.session.id,
+        resumed: result.resumed,
+        attemptStatus: result.attemptStatus,
+        environmentReset: result.environmentReset,
+      };
       res.json(body);
     } catch (err) {
       const status = err instanceof ContainerError ? USER_FACING[err.code] : undefined;

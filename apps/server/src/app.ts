@@ -1,8 +1,10 @@
 import express, { type ErrorRequestHandler, type Express } from 'express';
-import type { ApiError } from '@linuxlab/shared';
 import { config } from './config.js';
+import { sendError } from './http/errors.js';
+import type { AttemptService } from './modules/attempts/attemptService.js';
 import type { ContainerRuntime } from './modules/containers/index.js';
 import type { SessionManager } from './modules/sessions/sessionManager.js';
+import { attemptRouter } from './routes/attempt.js';
 import { examRouter } from './routes/exam.js';
 import { healthRouter } from './routes/health.js';
 import { sessionRouter } from './routes/session.js';
@@ -10,10 +12,11 @@ import { sessionRouter } from './routes/session.js';
 export interface AppDeps {
   runtime: ContainerRuntime;
   sessions: SessionManager;
+  attempts: AttemptService;
 }
 
 /** Builds the Express app without listening, so it can be tested in isolation. */
-export function createApp({ runtime, sessions }: AppDeps): Express {
+export function createApp({ runtime, sessions, attempts }: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -21,7 +24,8 @@ export function createApp({ runtime, sessions }: AppDeps): Express {
 
   app.use('/api', healthRouter(runtime));
   app.use('/api', sessionRouter(sessions));
-  app.use('/api', examRouter(sessions, runtime));
+  app.use('/api', examRouter({ sessions, attempts, runtime }));
+  app.use('/api', attemptRouter(sessions, attempts));
 
   // The backend only serves /api and /ws. Anyone who opens it directly in a
   // browser is sent to the web app instead of seeing "Cannot GET /".
@@ -29,16 +33,12 @@ export function createApp({ runtime, sessions }: AppDeps): Express {
     res.redirect(config.webUrl);
   });
 
-  app.use('/api', (_req, res) => {
-    const body: ApiError = { error: { code: 'NOT_FOUND', message: 'Endpoint not found' } };
-    res.status(404).json(body);
-  });
+  app.use('/api', (_req, res) => sendError(res, 404, 'NOT_FOUND', 'Endpoint not found'));
 
   // Never leak stack traces or internal details to the browser.
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     console.error('[server] unhandled error:', err);
-    const body: ApiError = { error: { code: 'INTERNAL', message: 'Internal server error' } };
-    res.status(500).json(body);
+    sendError(res, 500, 'INTERNAL', 'Internal server error');
   };
   app.use(errorHandler);
 

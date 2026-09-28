@@ -4,60 +4,12 @@
 //   npm run smoke:terminal                          → http://127.0.0.1:3001
 //   npm run smoke:terminal -- http://127.0.0.1:3101
 
-import WebSocket from 'ws';
-import { TERMINAL_CLOSE, TERMINAL_WS_PATH, type SessionResponse } from '@linuxlab/shared';
+import { TERMINAL_CLOSE, type SessionResponse } from '@linuxlab/shared';
+import { createReporter, openTerminal as open, ORIGIN } from './lib/testClient.js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:3001';
-const wsUrl = base.replace(/^http/, 'ws') + TERMINAL_WS_PATH;
-const ORIGIN = 'http://127.0.0.1:5173';
-
-let failures = 0;
-function report(ok: boolean, name: string, detail = ''): void {
-  if (!ok) failures++;
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${!ok && detail ? `\n        ${detail}` : ''}`);
-}
-
-/** Removes colors, cursor codes, window titles and carriage returns, leaving plain lines. */
-function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\r/g, '');
-}
-
-/** Opens a terminal socket and collects its output (as plain text). */
-function openTerminal(headers: Record<string, string>) {
-  const ws = new WebSocket(wsUrl, { headers });
-  let output = '';
-  const control: Array<Record<string, unknown>> = [];
-  ws.on('message', (data, isBinary) => {
-    if (isBinary) output = stripAnsi(output + data.toString());
-    else control.push(JSON.parse(data.toString()) as Record<string, unknown>);
-  });
-  const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)));
-  const failed = new Promise<string>((resolve) => ws.on('unexpected-response', (_req, res) => resolve(String(res.statusCode))));
-  return {
-    ws,
-    closed,
-    failed,
-    control,
-    get output() {
-      return output;
-    },
-    opened: new Promise<void>((resolve, reject) => {
-      ws.on('open', () => resolve());
-      ws.on('error', reject);
-    }),
-    type(text: string) {
-      ws.send(Buffer.from(text), { binary: true });
-    },
-    async waitFor(pattern: RegExp, timeoutMs = 8000): Promise<boolean> {
-      const until = Date.now() + timeoutMs;
-      while (Date.now() < until) {
-        if (pattern.test(output)) return true;
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      return false;
-    },
-  };
-}
+const { report, finish } = createReporter();
+const openTerminal = (headers: Record<string, string>) => open(base, headers);
 
 async function main(): Promise<void> {
   console.log(`Testing ${base}\n`);
@@ -119,9 +71,8 @@ async function main(): Promise<void> {
   report(await t3.waitFor(/student@linux:~\$ $/m, 8000) && t3.control.some((m) => m.type === 'shell-restarted'), '`exit` starts a new shell');
 
   t3.ws.close();
-  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   console.log(`(Session ${body.sessionId} is left to the idle timeout / reaper.)`);
-  process.exit(failures === 0 ? 0 : 1);
+  finish();
 }
 
 main().catch((err: unknown) => {

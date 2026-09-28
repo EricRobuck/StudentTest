@@ -8,16 +8,20 @@ import { readCookie, SESSION_COOKIE } from './security.js';
  * available to the route via sessionOf(res).
  */
 export function requireSession(sessions: SessionManager): RequestHandler {
-  return (req: Request, res: Response, next) => {
-    const token = readCookie(req.headers.cookie, SESSION_COOKIE);
-    const session = token ? sessions.findByToken(token) : undefined;
-    if (!session) {
-      const body: ApiError = { error: { code: 'NO_SESSION', message: 'No active exam session' } };
-      res.status(401).json(body);
-      return;
+  return async (req: Request, res: Response, next) => {
+    try {
+      const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+      const session = token ? await sessions.findByToken(token) : undefined;
+      if (!session) {
+        const body: ApiError = { error: { code: 'NO_SESSION', message: 'No active exam session' } };
+        res.status(401).json(body);
+        return;
+      }
+      res.locals.session = session;
+      next();
+    } catch (err) {
+      next(err);
     }
-    res.locals.session = session;
-    next();
   };
 }
 

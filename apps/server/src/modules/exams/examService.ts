@@ -1,10 +1,23 @@
 import type { StudentExam, StudentQuestion } from '@linuxlab/shared';
-import { sampleExam } from './sampleExam.js';
-import type { ExamDefinition } from './types.js';
+import { config } from '../../config.js';
+import { examModeSettings, sampleExam } from './sampleExam.js';
+import type { ExamDefinition, QuestionDefinition } from './types.js';
 
-/** The exam students currently take. Phase 7 replaces this with assignments from the database. */
+const activeExam: ExamDefinition =
+  config.sampleExamMode === 'exam' ? { ...sampleExam, settings: examModeSettings } : sampleExam;
+
+/** The exam new attempts are started on. Later: chosen by instructor assignment. */
 export function getActiveExam(): ExamDefinition {
-  return sampleExam;
+  return activeExam;
+}
+
+/** Looks up the exam an existing attempt belongs to. */
+export function getExamById(id: string): ExamDefinition | undefined {
+  return id === activeExam.id ? activeExam : undefined;
+}
+
+export function orderedQuestions(exam: ExamDefinition): QuestionDefinition[] {
+  return [...exam.questions].sort((a, b) => a.order - b.order);
 }
 
 /**
@@ -13,8 +26,7 @@ export function getActiveExam(): ExamDefinition {
  * never leak it by accident.
  */
 export function toStudentExam(exam: ExamDefinition): StudentExam {
-  const ordered = [...exam.questions].sort((a, b) => a.order - b.order);
-  const questions: StudentQuestion[] = ordered.map((q, index) => ({
+  const questions: StudentQuestion[] = orderedQuestions(exam).map((q, index) => ({
     id: q.id,
     number: index + 1,
     title: q.title,
@@ -25,11 +37,19 @@ export function toStudentExam(exam: ExamDefinition): StudentExam {
     difficulty: q.difficulty,
     hint: exam.settings.allowHints ? q.hint : undefined,
   }));
+  const s = exam.settings;
   return {
     id: exam.id,
     title: exam.title,
-    mode: exam.settings.mode,
+    mode: s.mode,
     totalPoints: questions.reduce((sum, q) => sum + q.points, 0),
+    rules: {
+      timeLimitMinutes: s.timeLimitMinutes,
+      maxAttemptsPerQuestion: s.maxAttemptsPerQuestion,
+      showFeedback: s.showFeedback,
+      showScoreDuringExam: s.showScoreDuringExam,
+      lockAfterSubmit: s.lockAfterSubmit,
+    },
     questions,
   };
 }

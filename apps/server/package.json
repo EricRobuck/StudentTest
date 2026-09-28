@@ -10,6 +10,7 @@
     "smoke:containers": "tsx scripts/smoke-containers.ts",
     "smoke:terminal": "tsx scripts/smoke-terminal.ts",
     "smoke:grading": "tsx scripts/smoke-grading.ts",
+    "smoke:scoring": "tsx scripts/smoke-scoring.ts",
     "containers:cleanup": "tsx scripts/cleanup-containers.ts"
   },
   "dependencies": {

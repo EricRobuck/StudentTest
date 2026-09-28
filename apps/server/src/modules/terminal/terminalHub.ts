@@ -1,7 +1,7 @@
+import { TERMINAL_CLOSE } from '@linuxlab/shared';
 import type { WebSocket } from 'ws';
 import type { ContainerRuntime } from '../containers/index.js';
-import type { ExamSession } from '../sessions/sessionManager.js';
-import { TerminalBridge, type BridgeConfig } from './terminalBridge.js';
+import { TerminalBridge, type BridgeConfig, type BridgeTarget } from './terminalBridge.js';
 
 /** Owns one TerminalBridge per active exam session. */
 export class TerminalHub {
@@ -13,11 +13,17 @@ export class TerminalHub {
     private readonly onActivity: (sessionId: string) => void,
   ) {}
 
-  attach(session: ExamSession, ws: WebSocket): void {
-    let bridge = this.bridges.get(session.id);
+  attach(target: BridgeTarget, ws: WebSocket): void {
+    let bridge = this.bridges.get(target.sessionId);
+    // The session's container was replaced (e.g. after an idle timeout):
+    // the old bridge points at a container that no longer exists.
+    if (bridge && bridge.containerId !== target.containerId) {
+      this.closeSession(target.sessionId, TERMINAL_CLOSE.ENDED, 'Environment replaced');
+      bridge = undefined;
+    }
     if (!bridge) {
-      bridge = new TerminalBridge(session, this.runtime, this.cfg, () => this.onActivity(session.id));
-      this.bridges.set(session.id, bridge);
+      bridge = new TerminalBridge(target, this.runtime, this.cfg, () => this.onActivity(target.sessionId));
+      this.bridges.set(target.sessionId, bridge);
     }
     bridge.attach(ws);
   }

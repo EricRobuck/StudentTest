@@ -6,7 +6,12 @@ import {
   type TerminalServerMessage,
 } from '@linuxlab/shared';
 import type { ContainerRuntime, ShellHandle } from '../containers/index.js';
-import type { ExamSession } from '../sessions/sessionManager.js';
+
+/** The session and the container whose shell this bridge connects to. */
+export interface BridgeTarget {
+  sessionId: string;
+  containerId: string;
+}
 
 export interface BridgeConfig {
   replayBufferBytes: number;
@@ -34,11 +39,15 @@ export class TerminalBridge {
   private closed = false;
 
   constructor(
-    private readonly session: ExamSession,
+    private readonly target: BridgeTarget,
     private readonly runtime: ContainerRuntime,
     private readonly cfg: BridgeConfig,
     private readonly onActivity: () => void,
   ) {}
+
+  get containerId(): string {
+    return this.target.containerId;
+  }
 
   get isAttached(): boolean {
     return this.socket !== undefined;
@@ -57,7 +66,7 @@ export class TerminalBridge {
     this.socket = ws;
     this.onActivity();
 
-    this.send({ type: 'attached', sessionId: this.session.id, resumed });
+    this.send({ type: 'attached', sessionId: this.target.sessionId, resumed });
     if (this.replayBytes > 0) ws.send(Buffer.concat(this.replay), { binary: true });
 
     ws.on('message', (data, isBinary) => this.handleMessage(data, isBinary));
@@ -102,7 +111,7 @@ export class TerminalBridge {
     if (this.shell || this.shellStarting || this.closed) return;
     this.shellStarting = (async () => {
       try {
-        const shell = await this.runtime.attachShell(this.session.containerId, this.size);
+        const shell = await this.runtime.attachShell(this.target.containerId, this.size);
         if (this.closed) {
           shell.close();
           return;
@@ -114,7 +123,7 @@ export class TerminalBridge {
         // starting; apply whatever the latest size is now.
         void shell.resize(this.size.cols, this.size.rows);
       } catch (err) {
-        console.warn(`[terminal] could not start shell for ${this.session.id}:`, err);
+        console.warn(`[terminal] could not start shell for ${this.target.sessionId}:`, err);
         this.send({ type: 'error', code: 'SHELL_FAILED', message: 'Could not start the Linux shell.' });
       } finally {
         this.shellStarting = undefined;
@@ -163,7 +172,7 @@ export class TerminalBridge {
     // Nobody watching: a new shell is started on the next attach instead.
     if (this.closed || !this.socket) return;
 
-    if (!(await this.runtime.isRunning(this.session.containerId).catch(() => false))) {
+    if (!(await this.runtime.isRunning(this.target.containerId).catch(() => false))) {
       this.send({
         type: 'error',
         code: 'ENVIRONMENT_ENDED',

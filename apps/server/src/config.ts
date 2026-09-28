@@ -1,6 +1,9 @@
 // Central configuration. Every environment variable the server reads is
 // parsed here and nowhere else, so misconfiguration fails fast at startup.
 
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
 function readPort(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -29,6 +32,14 @@ function readList(name: string, fallback: string[]): string[] {
 
 const webUrl = process.env.WEB_URL || 'http://127.0.0.1:5173';
 
+const databasePath =
+  process.env.DATABASE_PATH || fileURLToPath(new URL('../../../data/linuxlab.sqlite', import.meta.url));
+
+// Identifies this backend's containers on a shared Docker host. Defaults to a
+// hash of the database path: containers belong to the database that tracks them.
+const instanceId =
+  process.env.LINUXLAB_INSTANCE || createHash('sha256').update(databasePath).digest('hex').slice(0, 12);
+
 export const config = {
   serviceName: 'linux-lab-server',
   version: '0.1.0',
@@ -50,11 +61,19 @@ export const config = {
     cookieSecure: process.env.COOKIE_SECURE === 'true',
   },
 
+  // SQLite file. Default: <repo>/data/linuxlab.sqlite (git-ignored).
+  databasePath,
+
+  // 'practice' (default) or 'exam': which settings the sample exam runs with.
+  sampleExamMode: process.env.SAMPLE_EXAM_MODE === 'exam' ? ('exam' as const) : ('practice' as const),
+
   sessions: {
-    // A session with no browser attached for this long is ended and its
-    // container removed. Refreshes and brief disconnects are well within it.
+    // A session with no browser attached for this long has its container
+    // removed (a new one is created if the student comes back). Refreshes
+    // and brief disconnects are well within it.
     idleTimeoutMinutes: readPositiveInt('SESSION_IDLE_TIMEOUT_MINUTES', 30),
-    sweepIntervalSeconds: 60,
+    // Also how often expired exam timers are enforced.
+    sweepIntervalSeconds: 30,
   },
 
   terminal: {
@@ -67,6 +86,7 @@ export const config = {
 
   containers: {
     image: process.env.CONTAINER_IMAGE || 'linuxlab/student-ubuntu:24.04',
+    instanceId,
     memoryBytes: 256 * 1024 * 1024,
     nanoCpus: 500_000_000, // 0.5 CPU
     pidsLimit: 128,

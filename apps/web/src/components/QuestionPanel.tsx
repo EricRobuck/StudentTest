@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import type { StudentQuestion, SubmitResult } from '@linuxlab/shared';
+import type { QuestionProgress, StudentQuestion, SubmitFeedback, SubmitResult } from '@linuxlab/shared';
 import { TaskText } from './TaskText';
 
 interface QuestionPanelProps {
   question: StudentQuestion;
   total: number;
-  result: SubmitResult | undefined;
+  progress: QuestionProgress | undefined;
+  /** The latest submission made from this page, if any. */
+  lastSubmit: SubmitResult | undefined;
   submitting: boolean;
   submitError: string | null;
   onSubmit: () => void;
@@ -16,7 +18,8 @@ interface QuestionPanelProps {
 export function QuestionPanel({
   question,
   total,
-  result,
+  progress,
+  lastSubmit,
   submitting,
   submitError,
   onSubmit,
@@ -27,6 +30,12 @@ export function QuestionPanel({
   const hintShown = hintShownFor === question.id;
   const isFirst = question.number === 1;
   const isLast = question.number === total;
+  const attempts = progress?.attempts ?? 0;
+  const locked = progress?.locked ?? false;
+
+  let submitLabel = attempts > 0 ? 'Check again' : 'Submit answer';
+  if (submitting) submitLabel = 'Checking…';
+  else if (locked) submitLabel = progress?.attemptsRemaining === 0 ? 'No attempts left' : 'Submitted';
 
   return (
     <div className="question">
@@ -62,7 +71,17 @@ export function QuestionPanel({
           </button>
         ))}
 
-      {result && <ResultBox result={result} />}
+      {lastSubmit?.feedback && <FeedbackBox feedback={lastSubmit.feedback} />}
+      {lastSubmit && !lastSubmit.feedback && (
+        <p className="result result-recorded" role="status">
+          Answer recorded (attempt {lastSubmit.attemptNumber}). Results are shown when the exam ends.
+        </p>
+      )}
+      {!lastSubmit && progress?.best && (
+        <p className={`result ${progress.best.passed ? 'result-pass' : 'result-fail'}`}>
+          Best so far: {progress.best.passed ? '✓ Correct' : '✗ Not yet'} — {progress.best.pointsAwarded}/{question.points} points
+        </p>
+      )}
       {submitError && (
         <p className="result result-error" role="alert">
           {submitError}
@@ -73,25 +92,30 @@ export function QuestionPanel({
         <button type="button" className="secondary" onClick={onPrevious} disabled={isFirst}>
           ← Previous
         </button>
-        <button type="button" onClick={onSubmit} disabled={submitting}>
-          {submitting ? 'Checking…' : result ? 'Check again' : 'Submit answer'}
+        <button type="button" onClick={onSubmit} disabled={submitting || locked}>
+          {submitLabel}
         </button>
         <button type="button" className="secondary" onClick={onNext} disabled={isLast}>
           Next →
         </button>
       </div>
+      {progress?.attemptsRemaining !== null && progress?.attemptsRemaining !== undefined && (
+        <p className="attempts-left muted">
+          Attempts remaining: {progress.attemptsRemaining}
+        </p>
+      )}
     </div>
   );
 }
 
-function ResultBox({ result }: { result: SubmitResult }) {
+function FeedbackBox({ feedback }: { feedback: SubmitFeedback }) {
   return (
-    <div className={`result ${result.passed ? 'result-pass' : 'result-fail'}`} role="status">
+    <div className={`result ${feedback.passed ? 'result-pass' : 'result-fail'}`} role="status">
       <strong>
-        {result.passed ? '✓ Correct' : '✗ Not yet'} — {result.pointsAwarded}/{result.maxPoints} points
+        {feedback.passed ? '✓ Correct' : '✗ Not yet'} — {feedback.pointsAwarded}/{feedback.maxPoints} points
       </strong>
       <ul>
-        {result.rules.map((rule, i) => (
+        {feedback.rules.map((rule, i) => (
           <li key={i}>{rule.message}</li>
         ))}
       </ul>

@@ -32,17 +32,31 @@ export function attachTerminalSocket(server: Server, deps: TerminalSocketDeps): 
     }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      const token = readCookie(req.headers.cookie, SESSION_COOKIE);
-      const session = token ? deps.sessions.findByToken(token) : undefined;
-      if (!session) {
-        // Upgrade first, then close with a code the client understands
-        // ("create a session and try again"); a plain HTTP 401 is invisible to browsers.
-        ws.close(TERMINAL_CLOSE.NO_SESSION, 'No session');
-        return;
-      }
-      alive.set(ws, true);
-      ws.on('pong', () => alive.set(ws, true));
-      deps.hub.attach(session, ws);
+      // Hold incoming messages (e.g. the first resize) until the bridge is
+      // listening; otherwise they'd be dropped during the database lookup.
+      ws.pause();
+      void (async () => {
+        const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+        const session = token ? await deps.sessions.findByToken(token) : undefined;
+        if (!session) {
+          // Upgrade first, then close with a code the client understands
+          // ("create a session and try again"); a plain HTTP 401 is invisible to browsers.
+          ws.close(TERMINAL_CLOSE.NO_SESSION, 'No session');
+          return;
+        }
+        if (!session.containerId) {
+          // Exam finished (or environment ended and not yet recreated via POST /api/session).
+          ws.close(TERMINAL_CLOSE.NO_SESSION, 'No environment');
+          return;
+        }
+        alive.set(ws, true);
+        ws.on('pong', () => alive.set(ws, true));
+        deps.hub.attach({ sessionId: session.id, containerId: session.containerId }, ws);
+        ws.resume();
+      })().catch((err: unknown) => {
+        console.warn('[terminal] upgrade failed:', err);
+        ws.close(1011, 'Server error');
+      });
     });
   });
 

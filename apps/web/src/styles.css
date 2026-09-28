@@ -200,6 +200,101 @@ code {
   color: #78350f;
 }
 
+.result-recorded {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+
+.progress-step.answered {
+  background: #dbeafe;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attempts-left {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.finish-row {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  text-align: right;
+}
+
+button.danger {
+  background: transparent;
+  color: var(--bad);
+  border: 1px solid var(--bad);
+}
+
+.header-right {
+  display: flex;
+  gap: 2rem;
+}
+
+.timer-warning {
+  color: var(--bad);
+}
+
+.exam-body-single {
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.results {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.results-score {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.results-points {
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.results-percent {
+  font-size: 1.5rem;
+  color: var(--muted);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.results-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table .pass {
+  color: var(--ok);
+}
+
+.results-table .fail {
+  color: var(--bad);
+}
+
 .question-meta {
   display: flex;
   justify-content: space-between;

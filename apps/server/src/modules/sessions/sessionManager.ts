@@ -1,120 +1,161 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import type { AttemptStatus } from '@linuxlab/shared';
+import type { AttemptService } from '../attempts/attemptService.js';
 import type { ContainerRuntime } from '../containers/index.js';
+import type { Repositories, SessionRecord } from '../db/index.js';
+import type { ExamDefinition } from '../exams/types.js';
 
-// An exam session owns exactly one student container. The browser holds a
-// random token in an httpOnly cookie; only its SHA-256 hash is kept here, so
-// the token cannot be read back out of server memory or logs.
+// A session is one browser's link to one exam attempt and, while the exam is
+// in progress, one student container. The browser holds a random token in an
+// httpOnly cookie; only its SHA-256 hash is stored.
 //
-// Sessions live in memory for now. Phase 7 moves them into the database so
-// they survive a server restart (and adds the student/exam they belong to).
+// Sessions live in the database, so a server restart does not lose them:
+// the student reconnects to the same attempt and the same container.
 
 export interface ExamSession {
   id: string;
-  containerId: string;
-  containerName: string;
-  createdAt: Date;
-  /** Last time a browser was attached or sent input (ms since epoch). */
-  lastActiveAt: number;
+  attemptId: string;
+  containerId: string | null;
+  containerName: string | null;
 }
 
-export type SessionEndReason = 'idle' | 'environment-ended' | 'shutdown';
+export type EnvironmentEndReason = 'idle' | 'environment-lost' | 'exam-over';
+
+/** Don't write last-activity to the database more often than this per session. */
+const TOUCH_INTERVAL_MS = 30_000;
 
 export class SessionManager {
-  private readonly sessions = new Map<string, ExamSession>();
-  private readonly sessionIdByTokenHash = new Map<string, string>();
-  private readonly endListeners: Array<(session: ExamSession, reason: SessionEndReason) => void> = [];
+  private readonly envEndedListeners: Array<(sessionId: string, reason: EnvironmentEndReason) => void> = [];
+  private readonly lastTouchWrite = new Map<string, number>();
 
-  constructor(private readonly runtime: ContainerRuntime) {}
+  constructor(
+    private readonly runtime: ContainerRuntime,
+    private readonly repos: Repositories,
+    private readonly attempts: AttemptService,
+    private readonly activeExam: () => ExamDefinition,
+  ) {
+    // When an exam ends (finish or time up), its Linux environments go away.
+    attempts.onCompleted((attemptId) => void this.endEnvironmentsForAttempt(attemptId));
+  }
 
-  findByToken(token: string): ExamSession | undefined {
-    const id = this.sessionIdByTokenHash.get(hashToken(token));
-    return id ? this.sessions.get(id) : undefined;
+  async findByToken(token: string): Promise<ExamSession | undefined> {
+    const record = await this.repos.sessions.findByTokenHash(hashToken(token));
+    return record ? toSession(record) : undefined;
   }
 
   /**
-   * Returns the caller's existing session if its container is still running,
-   * otherwise creates a new session with a fresh container.
+   * Resumes the caller's session, or starts a new attempt + session + container.
+   * For an in-progress attempt whose container has gone (idle timeout, crash),
+   * a fresh container is created and environmentReset is reported.
    */
-  async resumeOrCreate(
-    token: string | undefined,
-  ): Promise<{ session: ExamSession; token: string; resumed: boolean }> {
-    const existing = token ? this.findByToken(token) : undefined;
+  async resumeOrCreate(token: string | undefined): Promise<{
+    session: ExamSession;
+    token: string;
+    resumed: boolean;
+    attemptStatus: AttemptStatus;
+    environmentReset: boolean;
+  }> {
+    const existing = token ? await this.repos.sessions.findByTokenHash(hashToken(token)) : undefined;
     if (existing && token) {
-      if (await this.runtime.isRunning(existing.containerId)) {
-        this.touch(existing.id);
-        return { session: existing, token, resumed: true };
+      const attempt = await this.attempts.get(existing.attemptId);
+      if (attempt?.status === 'completed') {
+        return { session: toSession(existing), token, resumed: true, attemptStatus: 'completed', environmentReset: false };
       }
-      await this.end(existing.id, 'environment-ended');
+      if (attempt) {
+        if (existing.containerId && (await this.runtime.isRunning(existing.containerId))) {
+          await this.touch(existing.id, true);
+          return { session: toSession(existing), token, resumed: true, attemptStatus: 'in_progress', environmentReset: false };
+        }
+        if (existing.containerId) await this.endEnvironment(existing.id, 'environment-lost');
+        const container = await this.runtime.createSessionContainer(existing.id);
+        await this.repos.sessions.setContainer(existing.id, container.containerId, container.name);
+        await this.touch(existing.id, true);
+        console.log(`[sessions] new environment for session ${existing.id} → ${container.name}`);
+        const session = { ...toSession(existing), containerId: container.containerId, containerName: container.name };
+        return { session, token, resumed: true, attemptStatus: 'in_progress', environmentReset: true };
+      }
     }
 
+    const attempt = await this.attempts.start(this.activeExam());
     const newToken = randomBytes(32).toString('base64url');
     const id = randomUUID();
     const container = await this.runtime.createSessionContainer(id);
-    const session: ExamSession = {
+    const now = new Date().toISOString();
+    const record: SessionRecord = {
       id,
+      tokenHash: hashToken(newToken),
+      attemptId: attempt.id,
       containerId: container.containerId,
       containerName: container.name,
-      createdAt: new Date(),
-      lastActiveAt: Date.now(),
+      createdAt: now,
+      lastActiveAt: now,
     };
-    this.sessions.set(id, session);
-    this.sessionIdByTokenHash.set(hashToken(newToken), id);
-    console.log(`[sessions] created session ${id} → ${container.name}`);
-    return { session, token: newToken, resumed: false };
+    await this.repos.sessions.create(record);
+    console.log(`[sessions] created session ${id} (attempt ${attempt.id}) → ${container.name}`);
+    return { session: toSession(record), token: newToken, resumed: false, attemptStatus: 'in_progress', environmentReset: false };
   }
 
-  touch(sessionId: string): void {
-    const s = this.sessions.get(sessionId);
-    if (s) s.lastActiveAt = Date.now();
+  /** Records activity. Throttled so keystrokes don't hammer the database. */
+  async touch(sessionId: string, force = false): Promise<void> {
+    const now = Date.now();
+    if (!force && now - (this.lastTouchWrite.get(sessionId) ?? 0) < TOUCH_INTERVAL_MS) return;
+    this.lastTouchWrite.set(sessionId, now);
+    await this.repos.sessions.touch(sessionId, new Date(now).toISOString());
   }
 
-  ownsContainer(containerId: string): boolean {
-    for (const s of this.sessions.values()) if (s.containerId === containerId) return true;
-    return false;
+  /** Container ids that belong to a live session (everything else is an orphan). */
+  async ownedContainerIds(): Promise<Set<string>> {
+    const sessions = await this.repos.sessions.listWithContainer();
+    return new Set(sessions.map((s) => s.containerId!));
   }
 
-  onEnded(listener: (session: ExamSession, reason: SessionEndReason) => void): void {
-    this.endListeners.push(listener);
+  onEnvironmentEnded(listener: (sessionId: string, reason: EnvironmentEndReason) => void): void {
+    this.envEndedListeners.push(listener);
   }
 
-  /** Ends a session and removes its container. */
-  async end(sessionId: string, reason: SessionEndReason): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    this.sessions.delete(sessionId);
-    for (const [hash, id] of this.sessionIdByTokenHash) {
-      if (id === sessionId) this.sessionIdByTokenHash.delete(hash);
+  /** Removes a session's container. The session and attempt remain. */
+  async endEnvironment(sessionId: string, reason: EnvironmentEndReason): Promise<void> {
+    const s = await this.repos.sessions.get(sessionId);
+    if (!s?.containerId) return;
+    await this.repos.sessions.setContainer(sessionId, null, null);
+    for (const listener of this.envEndedListeners) listener(sessionId, reason);
+    await this.runtime.destroy(s.containerId);
+    console.log(`[sessions] removed environment of session ${sessionId} (${reason})`);
+  }
+
+  private async endEnvironmentsForAttempt(attemptId: string): Promise<void> {
+    for (const s of await this.repos.sessions.findByAttempt(attemptId)) {
+      await this.endEnvironment(s.id, 'exam-over').catch((err: unknown) =>
+        console.warn(`[sessions] could not remove environment of ${s.id}:`, err),
+      );
     }
-    for (const listener of this.endListeners) listener(session, reason);
-    await this.runtime.destroy(session.containerId);
-    console.log(`[sessions] ended session ${sessionId} (${reason})`);
   }
 
   /**
-   * Periodically ends sessions that have had no browser attached for longer
-   * than idleMs. Returns a stop function.
+   * Periodically: complete attempts whose time is up, and remove containers
+   * of sessions with no browser attached for longer than idleMs.
    */
-  startIdleSweep(opts: {
-    idleMs: number;
-    intervalMs: number;
-    isAttached: (sessionId: string) => boolean;
-  }): () => void {
+  startSweep(opts: { idleMs: number; intervalMs: number; isAttached: (sessionId: string) => boolean }): () => void {
     const sweep = async () => {
+      await this.attempts.expireOverdue();
       const now = Date.now();
-      for (const s of [...this.sessions.values()]) {
+      for (const s of await this.repos.sessions.listWithContainer()) {
         if (opts.isAttached(s.id)) {
-          s.lastActiveAt = now;
-        } else if (now - s.lastActiveAt > opts.idleMs) {
-          await this.end(s.id, 'idle').catch((err: unknown) =>
-            console.warn(`[sessions] could not end idle session ${s.id}:`, err),
-          );
+          await this.touch(s.id);
+        } else if (now - Date.parse(s.lastActiveAt) > opts.idleMs) {
+          await this.endEnvironment(s.id, 'idle');
         }
       }
     };
-    const timer = setInterval(() => void sweep(), opts.intervalMs);
+    const run = () => sweep().catch((err: unknown) => console.warn('[sessions] sweep failed:', err));
+    const timer = setInterval(() => void run(), opts.intervalMs);
     timer.unref();
     return () => clearInterval(timer);
   }
+}
+
+function toSession(r: SessionRecord): ExamSession {
+  return { id: r.id, attemptId: r.attemptId, containerId: r.containerId, containerName: r.containerName };
 }
 
 function hashToken(token: string): string {

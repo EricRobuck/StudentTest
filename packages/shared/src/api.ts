@@ -1,3 +1,5 @@
+import type { AttemptStatus } from './exam.js';
+
 /** Response body of GET /api/health. */
 export interface HealthResponse {
   status: 'ok';
@@ -23,8 +25,14 @@ export interface DockerStatus {
  */
 export interface SessionResponse {
   sessionId: string;
-  /** false when a brand-new Linux environment was just created. */
+  /** false when a brand-new session (and exam attempt) was just started. */
   resumed: boolean;
+  attemptStatus: AttemptStatus;
+  /**
+   * true when the previous Linux environment had ended (idle timeout, server
+   * problem) and a fresh one was created: files from before are gone.
+   */
+  environmentReset: boolean;
 }
 
 /** Uniform error body returned by every REST endpoint. */

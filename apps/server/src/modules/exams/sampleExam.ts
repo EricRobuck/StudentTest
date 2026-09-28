@@ -1,19 +1,34 @@
-import type { ExamDefinition } from './types.js';
+import type { ExamDefinition, ExamSettings } from './types.js';
 
 // The MVP's single hard-coded exam (requirements §22). Each question grades
 // the resulting state of the container, never the exact command typed.
+
+export const practiceSettings: ExamSettings = {
+  mode: 'practice',
+  allowHints: true,
+  timeLimitMinutes: 45,
+  maxAttemptsPerQuestion: null,
+  showFeedback: true,
+  showScoreDuringExam: true,
+  lockAfterSubmit: false,
+};
+
+/** Strict settings for trying exam mode: SAMPLE_EXAM_MODE=exam. */
+export const examModeSettings: ExamSettings = {
+  mode: 'exam',
+  allowHints: false,
+  timeLimitMinutes: 30,
+  maxAttemptsPerQuestion: 2,
+  showFeedback: false,
+  showScoreDuringExam: false,
+  lockAfterSubmit: false,
+};
 
 export const sampleExam: ExamDefinition = {
   id: 'linux-basics-sample',
   title: 'Linux Practical Exam',
   description: 'Five introductory tasks: navigation, directories, files, contents, and permissions.',
-  settings: {
-    mode: 'practice',
-    allowHints: true,
-    timeLimitMinutes: 45,
-    maxAttemptsPerQuestion: null,
-    showScoreDuringExam: true,
-  },
+  settings: practiceSettings,
   questions: [
     {
       id: 'q1-navigate-etc',

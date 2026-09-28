@@ -256,3 +256,29 @@ is typed once in `packages/shared`.
     grading run per session at a time). Results are not stored yet (Phase 7).
   - Verified by `npm run smoke:grading` (18 scenarios incl. symlink, wrong
     case, background `cd`, nested bash, chmod 000).
+- **Phase 7** — Scoring and persistence.
+  - SQLite via Node's built-in `node:sqlite` (no native add-on to install).
+    `modules/db/`: numbered migrations, async repository interfaces
+    (`repositories.ts`) with a SQLite implementation — PostgreSQL = a new
+    implementation of the same interfaces. File: `data/linuxlab.sqlite`.
+  - Tables: `exam_attempts`, `attempt_questions` (per-student variables for
+    future randomization), `sessions` (token hash, container), `submissions`
+    (every submit; score 0..1 + points for partial credit; full rule results
+    incl. instructor detail as JSON).
+  - `AttemptService` holds the scoring rules: a question's points = its best
+    submission (later tasks can undo earlier state, e.g. leaving /etc);
+    server-side deadline (lazy check on every access + 30 s sweep);
+    attempt limits, lock-after-submit, hidden feedback/score per exam settings.
+  - Sessions are in the database: after a server restart students reconnect
+    to the same attempt and container. If a container is gone (idle timeout),
+    a new one is created and the student is told files were reset; points stay.
+  - Finish / time-out completes the attempt and removes its containers; the
+    browser then only ever gets the results page for that attempt.
+  - Endpoints: `GET /api/attempt`, `PUT /api/attempt/current-question`,
+    `POST /api/attempt/finish`, `GET /api/attempt/result`.
+  - Containers carry a `linuxlab.instance` label (hash of the database path
+    by default, or `LINUXLAB_INSTANCE`). Each backend only lists and reaps its
+    own containers, so several backends can share one Docker host.
+  - `SAMPLE_EXAM_MODE=exam` runs the sample exam with exam-mode settings.
+  - Verified by `npm run smoke:scoring` (practice mode incl. time-out when
+    given the DB path; exam mode on a server started with SAMPLE_EXAM_MODE=exam).

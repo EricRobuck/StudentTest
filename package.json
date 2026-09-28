@@ -17,6 +17,7 @@
     "smoke:containers": "npm run smoke:containers -w @linuxlab/server --",
     "smoke:terminal": "npm run smoke:terminal -w @linuxlab/server --",
     "smoke:grading": "npm run smoke:grading -w @linuxlab/server",
+    "smoke:scoring": "npm run smoke:scoring -w @linuxlab/server --",
     "containers:cleanup": "npm run containers:cleanup -w @linuxlab/server"
   },
   "devDependencies": {

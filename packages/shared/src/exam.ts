@@ -52,14 +52,86 @@ export interface RuleResultView {
   message: string;
 }
 
-/** Response body of POST /api/exam/questions/:questionId/submit. */
-export interface SubmitResult {
-  questionId: string;
+/** Immediate result of one submission (only when the exam shows feedback). */
+export interface SubmitFeedback {
   passed: boolean;
   pointsAwarded: number;
   maxPoints: number;
   rules: RuleResultView[];
-  gradedAt: string;
+}
+
+export interface ScoreView {
+  earned: number;
+  max: number;
+}
+
+/** A student's standing on one question. */
+export interface QuestionProgress {
+  questionId: string;
+  /** Number of submissions so far. */
+  attempts: number;
+  /** null = unlimited. */
+  attemptsRemaining: number | null;
+  /** No further submissions accepted (attempt limit, lock-after-submit, or exam over). */
+  locked: boolean;
+  /** Best result so far; null if never submitted or results are hidden until the end. */
+  best: { passed: boolean; pointsAwarded: number } | null;
+}
+
+/** Response body of POST /api/exam/questions/:questionId/submit. */
+export interface SubmitResult {
+  questionId: string;
+  attemptNumber: number;
+  /** null when the exam hides results until completion ("answer recorded"). */
+  feedback: SubmitFeedback | null;
+  progress: QuestionProgress;
+  /** null when the score is hidden until completion. */
+  score: ScoreView | null;
+}
+
+export type AttemptStatus = 'in_progress' | 'completed';
+export type AttemptEndReason = 'finished' | 'time_expired';
+
+/** Response body of GET /api/attempt: the student's live exam state. */
+export interface AttemptView {
+  id: string;
+  status: AttemptStatus;
+  startedAt: string;
+  /** null = untimed. The client counts down using serverTime to correct its clock. */
+  deadlineAt: string | null;
+  serverTime: string;
+  currentQuestionId: string | null;
+  score: ScoreView | null;
+  questions: QuestionProgress[];
+}
+
+/** Response body of GET /api/attempt/result (after completion). */
+export interface ExamResultView {
+  examTitle: string;
+  startedAt: string;
+  completedAt: string;
+  endReason: AttemptEndReason;
+  score: ScoreView;
+  /** 0..100, rounded to one decimal. */
+  percentage: number;
+  questions: Array<{
+    questionId: string;
+    number: number;
+    title: string;
+    pointsAwarded: number;
+    maxPoints: number;
+    passed: boolean;
+    attempts: number;
+  }>;
+}
+
+/** The exam rules a student is allowed to know. */
+export interface StudentExamRules {
+  timeLimitMinutes: number | null;
+  maxAttemptsPerQuestion: number | null;
+  showFeedback: boolean;
+  showScoreDuringExam: boolean;
+  lockAfterSubmit: boolean;
 }
 
 /** Response body of GET /api/exam. */
@@ -68,5 +140,6 @@ export interface StudentExam {
   title: string;
   mode: ExamMode;
   totalPoints: number;
+  rules: StudentExamRules;
   questions: StudentQuestion[];
 }

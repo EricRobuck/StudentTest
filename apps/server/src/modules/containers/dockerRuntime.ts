@@ -13,6 +13,9 @@ import {
 
 const LABEL_MANAGED = 'linuxlab.managed';
 const LABEL_SESSION = 'linuxlab.session';
+// Which backend installation owns the container. Several backends can share
+// one Docker host (dev + test, two courses); each only manages its own.
+const LABEL_INSTANCE = 'linuxlab.instance';
 const SESSION_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
 
 const SHELL_ENV = ['TERM=xterm-256color', 'LANG=C.UTF-8', 'HOME=/home/student', 'USER=student'];
@@ -84,11 +87,10 @@ export function createDockerRuntime(cfg: ContainerConfig, docker = new Docker())
     }
   }
 
-  async function listManaged(): Promise<SessionContainer[]> {
-    const containers = await docker.listContainers({
-      all: true,
-      filters: { label: [`${LABEL_MANAGED}=true`] },
-    });
+  async function listManaged(options: { allInstances?: boolean } = {}): Promise<SessionContainer[]> {
+    const labels = [`${LABEL_MANAGED}=true`];
+    if (!options.allInstances) labels.push(`${LABEL_INSTANCE}=${cfg.instanceId}`);
+    const containers = await docker.listContainers({ all: true, filters: { label: labels } });
     return containers.map((c) => ({
       containerId: c.Id,
       name: (c.Names[0] ?? '').replace(/^\//, ''),
@@ -124,7 +126,7 @@ export function createDockerRuntime(cfg: ContainerConfig, docker = new Docker())
         Env: SHELL_ENV,
         Cmd: ['sleep', 'infinity'],
         NetworkDisabled: true,
-        Labels: { [LABEL_MANAGED]: 'true', [LABEL_SESSION]: sessionId },
+        Labels: { [LABEL_MANAGED]: 'true', [LABEL_SESSION]: sessionId, [LABEL_INSTANCE]: cfg.instanceId },
         HostConfig: hostConfig,
       });
     } catch (err) {

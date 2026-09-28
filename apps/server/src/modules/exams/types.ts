@@ -37,7 +37,11 @@ export interface ExamSettings {
   timeLimitMinutes: number | null;
   /** null = unlimited attempts per question. */
   maxAttemptsPerQuestion: number | null;
+  /** Show pass/fail and reasons right after each submission. */
+  showFeedback: boolean;
   showScoreDuringExam: boolean;
+  /** Accept only one submission per question. */
+  lockAfterSubmit: boolean;
 }
 
 export interface ExamDefinition {

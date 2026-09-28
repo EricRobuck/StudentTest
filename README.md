@@ -40,7 +40,17 @@ npm run build        # production build of the web app
 npm run smoke:containers              # create a student container, verify isolation, destroy it
 npm run smoke:containers -- --keep    # same, but leave it running to explore
 npm run containers:cleanup            # remove every container this project created
+npm run smoke:terminal                # (backend running) terminal + security checks
+npm run smoke:grading                 # validators against a real container
+npm run smoke:scoring                 # (backend running) scoring, finish, exam rules
 ```
+
+Try the stricter exam mode (no hints, hidden results, 2 attempts, 30 minutes)
+by starting the backend with `SAMPLE_EXAM_MODE=exam` (PowerShell:
+`$env:SAMPLE_EXAM_MODE='exam'; npm run dev`).
+
+Exam data is stored in `data/linuxlab.sqlite` (git-ignored). Delete that file
+to start completely fresh.
 
 ## Layout
 

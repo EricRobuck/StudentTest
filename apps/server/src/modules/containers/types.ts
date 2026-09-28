@@ -60,7 +60,8 @@ export interface ContainerRuntime {
   /** Runs a fixed argv (never a shell string built from input) inside the container. */
   exec(containerId: string, argv: readonly string[], options?: ExecOptions): Promise<ExecResult>;
   destroy(containerId: string): Promise<void>;
-  listManaged(): Promise<SessionContainer[]>;
+  /** This backend's containers; allInstances includes other backends' too (cleanup tools only). */
+  listManaged(options?: { allInstances?: boolean }): Promise<SessionContainer[]>;
 }
 
 export class ContainerError extends Error {

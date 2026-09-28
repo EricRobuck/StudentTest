@@ -68,14 +68,18 @@ export function createWebSocketTransport(): TerminalTransport {
     handlers.onStatus('connecting', attempt === 0 ? 'starting your Linux environment…' : 'reconnecting…');
 
     try {
-      await api.startSession();
+      const session = await api.startSession();
+      if (disposed) return;
+      if (session.attemptStatus === 'completed') {
+        handlers.onStatus('disconnected', 'the exam has ended');
+        return;
+      }
     } catch (err) {
       if (disposed) return;
       handlers.onStatus('disconnected', err instanceof Error ? err.message : String(err));
       scheduleReconnect();
       return;
     }
-    if (disposed) return;
 
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${scheme}://${window.location.host}${TERMINAL_WS_PATH}`);
