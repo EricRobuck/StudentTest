@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "dev": "tsx watch --clear-screen=false --include ../../.env src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit -p .",
     "smoke:containers": "tsx scripts/smoke-containers.ts",
@@ -12,6 +12,7 @@
     "smoke:grading": "tsx scripts/smoke-grading.ts",
     "smoke:scoring": "tsx scripts/smoke-scoring.ts",
     "smoke:commands": "tsx scripts/smoke-commands.ts",
+    "smoke:instructor": "tsx scripts/smoke-instructor.ts",
     "commands:show": "tsx scripts/show-commands.ts",
     "containers:cleanup": "tsx scripts/cleanup-containers.ts"
   },

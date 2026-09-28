@@ -1,8 +1,11 @@
 import type {
   ApiError,
+  AttemptDetail,
+  AttemptSummary,
   AttemptView,
   ExamResultView,
   HealthResponse,
+  InstructorStatus,
   SessionResponse,
   StudentExam,
   SubmitResult,
@@ -79,4 +82,14 @@ export const api = {
   newAttempt: () => request<SessionResponse>('POST', '/api/session/new-attempt'),
 
   result: (signal?: AbortSignal) => request<ExamResultView>('GET', '/api/attempt/result', { signal }),
+};
+
+/** Instructor endpoints (separate cookie; the server refuses these for students). */
+export const instructorApi = {
+  me: (signal?: AbortSignal) => request<InstructorStatus>('GET', '/api/instructor/me', { signal }),
+  login: (password: string) => request<void>('POST', '/api/instructor/login', { body: { password } }),
+  logout: () => request<void>('POST', '/api/instructor/logout'),
+  attempts: (signal?: AbortSignal) => request<AttemptSummary[]>('GET', '/api/instructor/attempts', { signal }),
+  attempt: (id: string, signal?: AbortSignal) =>
+    request<AttemptDetail>('GET', `/api/instructor/attempts/${encodeURIComponent(id)}`, { signal }),
 };

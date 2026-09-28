@@ -4,6 +4,14 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
+// Optional <repo>/.env file (git-ignored) for local settings such as
+// INSTRUCTOR_PASSWORD. Real environment variables take precedence.
+try {
+  process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)));
+} catch {
+  // No .env file: fine.
+}
+
 function readPort(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -32,6 +40,13 @@ function readList(name: string, fallback: string[]): string[] {
 
 const webUrl = process.env.WEB_URL || 'http://127.0.0.1:5173';
 
+function readInstructorPassword(): string | undefined {
+  const value = process.env.INSTRUCTOR_PASSWORD;
+  if (!value) return undefined; // instructor pages disabled
+  if (value.length < 10) throw new Error('INSTRUCTOR_PASSWORD must be at least 10 characters');
+  return value;
+}
+
 const databasePath =
   process.env.DATABASE_PATH || fileURLToPath(new URL('../../../data/linuxlab.sqlite', import.meta.url));
 
@@ -59,6 +74,9 @@ export const config = {
     ],
     // Set COOKIE_SECURE=true when served over HTTPS.
     cookieSecure: process.env.COOKIE_SECURE === 'true',
+    // Shared instructor password (interim until instructor accounts exist).
+    // Unset = instructor pages disabled. There is deliberately no default.
+    instructorPassword: readInstructorPassword(),
   },
 
   // SQLite file. Default: <repo>/data/linuxlab.sqlite (git-ignored).

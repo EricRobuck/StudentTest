@@ -92,4 +92,26 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 3,
+    name: 'question visits, filesystem snapshots',
+    sql: `
+      -- Each time a question becomes the open one; gives time spent per question.
+      CREATE TABLE question_visits (
+        attempt_id  TEXT NOT NULL REFERENCES exam_attempts(id),
+        question_id TEXT NOT NULL,
+        entered_at  TEXT NOT NULL
+      );
+      CREATE INDEX question_visits_attempt ON question_visits(attempt_id, entered_at);
+
+      -- The student's files when the exam ended (the container is removed after).
+      CREATE TABLE fs_snapshots (
+        attempt_id TEXT NOT NULL REFERENCES exam_attempts(id),
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        taken_at   TEXT NOT NULL,
+        data       TEXT NOT NULL,            -- JSON FsSnapshotView
+        PRIMARY KEY (attempt_id, session_id)
+      );
+    `,
+  },
 ];

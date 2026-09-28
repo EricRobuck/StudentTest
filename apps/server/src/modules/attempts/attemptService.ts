@@ -50,6 +50,9 @@ export class AttemptService {
       attempt,
       questions.map((q, i) => ({ questionId: q.id, position: i + 1, maxPoints: q.points, variables: {} })),
     );
+    if (attempt.currentQuestionId) {
+      await this.repos.attempts.addVisit(attempt.id, attempt.currentQuestionId, attempt.startedAt);
+    }
     return attempt;
   }
 
@@ -82,7 +85,9 @@ export class AttemptService {
   async setCurrentQuestion(attempt: AttemptRecord, questionId: string): Promise<boolean> {
     const exam = this.examById(attempt.examId);
     if (!exam?.questions.some((q) => q.id === questionId)) return false;
+    if (attempt.status !== 'in_progress' || attempt.currentQuestionId === questionId) return true;
     await this.repos.attempts.setCurrentQuestion(attempt.id, questionId);
+    await this.repos.attempts.addVisit(attempt.id, questionId, new Date().toISOString());
     return true;
   }
 

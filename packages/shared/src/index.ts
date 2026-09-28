@@ -5,4 +5,5 @@
 
 export * from './api.js';
 export * from './exam.js';
+export * from './instructor.js';
 export * from './terminal.js';

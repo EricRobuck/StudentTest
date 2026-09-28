@@ -70,6 +70,17 @@ export interface AttemptRepository {
   complete(id: string, reason: AttemptEndReason, completedAt: string): Promise<boolean>;
   /** In-progress attempts whose deadline has passed. */
   listExpired(now: string): Promise<AttemptRecord[]>;
+  /** All attempts, newest first. */
+  listAll(): Promise<AttemptRecord[]>;
+  /** Records that a question became the open one. */
+  addVisit(attemptId: string, questionId: string, at: string): Promise<void>;
+  visits(attemptId: string): Promise<Array<{ questionId: string; enteredAt: string }>>;
+}
+
+export interface SnapshotRepository {
+  save(attemptId: string, sessionId: string, takenAt: string, data: unknown): Promise<void>;
+  /** Snapshots of an attempt, oldest first. */
+  forAttempt(attemptId: string): Promise<Array<{ sessionId: string; takenAt: string; data: unknown }>>;
 }
 
 export interface SessionRepository {
@@ -100,4 +111,5 @@ export interface Repositories {
   sessions: SessionRepository;
   submissions: SubmissionRepository;
   commands: CommandLogRepository;
+  snapshots: SnapshotRepository;
 }

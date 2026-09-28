@@ -19,6 +19,7 @@
     "smoke:grading": "npm run smoke:grading -w @linuxlab/server",
     "smoke:scoring": "npm run smoke:scoring -w @linuxlab/server --",
     "smoke:commands": "npm run smoke:commands -w @linuxlab/server --",
+    "smoke:instructor": "npm run smoke:instructor -w @linuxlab/server --",
     "commands:show": "npm run commands:show -w @linuxlab/server --",
     "containers:cleanup": "npm run containers:cleanup -w @linuxlab/server"
   },

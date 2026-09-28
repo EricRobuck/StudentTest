@@ -45,6 +45,7 @@ npm run smoke:grading                 # validators against a real container
 npm run smoke:scoring                 # (backend running) scoring, finish, exam rules
 npm run smoke:commands -- <url> <db>  # (backend running) command logging
 npm run commands:show                 # command history of the latest attempt (--all for every attempt)
+npm run smoke:instructor -- <url> <pw> # (backend running) instructor access + results views
 ```
 
 Try the stricter exam mode (no hints, hidden results, 2 attempts, 30 minutes)
@@ -53,6 +54,13 @@ by starting the backend with `SAMPLE_EXAM_MODE=exam` (PowerShell:
 
 Exam data is stored in `data/linuxlab.sqlite` (git-ignored). Delete that file
 to start completely fresh.
+
+## Instructor pages
+
+Open http://127.0.0.1:5173/instructor. Access needs `INSTRUCTOR_PASSWORD`
+(at least 10 characters), set in a `.env` file in the project root (copy
+`.env.example`) or as an environment variable. Restart the server after
+changing it. Without it, the instructor pages are disabled.
 
 ## Layout
 

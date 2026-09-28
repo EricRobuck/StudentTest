@@ -112,6 +112,37 @@ export function createSqliteRepositories(db: Database): Repositories {
           .all(now)
           .map(toAttempt);
       },
+      async listAll() {
+        return db.prepare('SELECT * FROM exam_attempts ORDER BY started_at DESC').all().map(toAttempt);
+      },
+      async addVisit(attemptId, questionId, at) {
+        db.prepare('INSERT INTO question_visits (attempt_id, question_id, entered_at) VALUES (?, ?, ?)').run(
+          attemptId,
+          questionId,
+          at,
+        );
+      },
+      async visits(attemptId) {
+        return db
+          .prepare('SELECT question_id, entered_at FROM question_visits WHERE attempt_id = ? ORDER BY entered_at')
+          .all(attemptId)
+          .map((r) => ({ questionId: str(r.question_id), enteredAt: str(r.entered_at) }));
+      },
+    },
+
+    snapshots: {
+      async save(attemptId, sessionId, takenAt, data) {
+        db.prepare(
+          `INSERT INTO fs_snapshots (attempt_id, session_id, taken_at, data) VALUES (?, ?, ?, ?)
+           ON CONFLICT (attempt_id, session_id) DO UPDATE SET taken_at = excluded.taken_at, data = excluded.data`,
+        ).run(attemptId, sessionId, takenAt, JSON.stringify(data));
+      },
+      async forAttempt(attemptId) {
+        return db
+          .prepare('SELECT session_id, taken_at, data FROM fs_snapshots WHERE attempt_id = ? ORDER BY taken_at')
+          .all(attemptId)
+          .map((r) => ({ sessionId: str(r.session_id), takenAt: str(r.taken_at), data: JSON.parse(str(r.data)) as unknown }));
+      },
     },
 
     sessions: {

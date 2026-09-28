@@ -27,6 +27,7 @@ const TOUCH_INTERVAL_MS = 30_000;
 export class SessionManager {
   private readonly envEndedListeners: Array<(sessionId: string, reason: EnvironmentEndReason) => void> = [];
   private readonly lastTouchWrite = new Map<string, number>();
+  private readonly examOverHooks: Array<(attemptId: string, sessionId: string, containerId: string) => Promise<void>> = [];
 
   constructor(
     private readonly runtime: ContainerRuntime,
@@ -123,11 +124,21 @@ export class SessionManager {
     console.log(`[sessions] removed environment of session ${sessionId} (${reason})`);
   }
 
+  /** Runs just before a finished exam's container is removed (e.g. to snapshot its files). */
+  beforeExamEnvironmentRemoved(hook: (attemptId: string, sessionId: string, containerId: string) => Promise<void>): void {
+    this.examOverHooks.push(hook);
+  }
+
   private async endEnvironmentsForAttempt(attemptId: string): Promise<void> {
     for (const s of await this.repos.sessions.findByAttempt(attemptId)) {
-      await this.endEnvironment(s.id, 'exam-over').catch((err: unknown) =>
-        console.warn(`[sessions] could not remove environment of ${s.id}:`, err),
-      );
+      try {
+        if (s.containerId) {
+          for (const hook of this.examOverHooks) await hook(attemptId, s.id, s.containerId);
+        }
+        await this.endEnvironment(s.id, 'exam-over');
+      } catch (err) {
+        console.warn(`[sessions] could not remove environment of ${s.id}:`, err);
+      }
     }
   }
 

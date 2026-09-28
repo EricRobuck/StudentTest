@@ -7,7 +7,10 @@ import { CommandLogService } from './modules/commandLog/commandLogService.js';
 import { createDockerRuntime, startReaper } from './modules/containers/index.js';
 import { createSqliteRepositories, openDatabase } from './modules/db/index.js';
 import { getActiveExam, getExamById } from './modules/exams/examService.js';
+import { InstructorAuth } from './modules/instructor/instructorAuth.js';
+import { InstructorService } from './modules/instructor/instructorService.js';
 import { SessionManager } from './modules/sessions/sessionManager.js';
+import { SnapshotService } from './modules/snapshots/snapshotService.js';
 import { TerminalHub } from './modules/terminal/terminalHub.js';
 import { attachTerminalSocket } from './modules/terminal/terminalSocket.js';
 
@@ -25,7 +28,16 @@ sessions.onEnvironmentEnded((sessionId, reason) =>
   hub.closeSession(sessionId, TERMINAL_CLOSE.ENDED, `Environment ended (${reason})`),
 );
 
-const server = createServer(createApp({ runtime, sessions, attempts }));
+// Snapshot the student's files before a finished exam's container is removed.
+const snapshots = new SnapshotService(runtime, repos);
+sessions.beforeExamEnvironmentRemoved((attemptId, sessionId, containerId) =>
+  snapshots.capture(attemptId, sessionId, containerId),
+);
+
+const instructorAuth = new InstructorAuth(config.security.instructorPassword);
+const instructor = new InstructorService(repos, attempts, getExamById);
+
+const server = createServer(createApp({ runtime, sessions, attempts, instructorAuth, instructor }));
 const terminalSocket = attachTerminalSocket(server, {
   sessions,
   hub,
@@ -53,6 +65,11 @@ server.listen(config.port, config.host, () => {
   console.log(`[server] Open the exam app in your browser at ${config.webUrl}`);
   console.log(`[db] ${config.databasePath}`);
   console.log(`[exams] active exam "${getActiveExam().title}" in ${getActiveExam().settings.mode} mode`);
+  console.log(
+    instructorAuth.enabled
+      ? `[instructor] instructor pages at ${config.webUrl}/instructor`
+      : '[instructor] DISABLED: set INSTRUCTOR_PASSWORD (e.g. in .env) to enable the instructor pages',
+  );
   void runtime.status().then((s) => {
     if (s.available && s.imagePresent) console.log(`[containers] Docker ready, image ${s.image}`);
     else console.warn(`[containers] NOT READY: ${s.message}`);

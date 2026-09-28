@@ -303,3 +303,27 @@ is typed once in `packages/shared`.
     system bashrc (`bash --norc`), but that command is logged and flagged.
   - `npm run commands:show` prints logs until the instructor page (Phase 9).
     Verified by `npm run smoke:commands` (parser unit checks + end to end).
+- **Phase 9** — Instructor results pages (`/instructor`).
+  - Interim auth (`modules/instructor/instructorAuth.ts`): one shared
+    `INSTRUCTOR_PASSWORD` (≥10 chars, no default; unset = disabled), read from
+    the environment or a git-ignored `.env`. Constant-time comparison,
+    5 failures per client address → 15 min lockout, random session token in
+    an httpOnly SameSite=Strict cookie (hash kept in memory, 8 h), audit log
+    lines for every login. Student session cookies never grant access
+    (`http/requireInstructor.ts`). To be replaced by instructor accounts.
+  - `InstructorService`: attempts list (score, status, counts, flagged
+    commands) and attempt detail (per question: validators, every
+    submission with instructor-only `detail`, commands while it was open,
+    time spent) — `GET /api/instructor/attempts[/:id]`.
+  - Time spent: `question_visits` (migration 3) records each time a
+    question becomes the open one.
+  - Final filesystem state: `SnapshotService` runs just before a finished
+    or timed-out exam's container is removed (`beforeExamEnvironmentRemoved`
+    hook): listing of `/tmp` and `/home/student` (type, mode, owner, size,
+    symlink target) + contents of up to 50 small files, stored in
+    `fs_snapshots`. Snapshot failure never blocks ending the exam.
+  - UI: `main.tsx` routes `/instructor*` to `InstructorApp` (so no student
+    session/container is created). Student-controlled text is rendered as
+    React text with control characters made visible (`printable`).
+  - Verified by `npm run smoke:instructor` (access control, lockout,
+    grader detail, commands, time, snapshot).
