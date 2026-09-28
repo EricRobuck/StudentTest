@@ -23,7 +23,7 @@ export function createApp({ runtime, sessions, attempts }: AppDeps): Express {
   app.use(express.json({ limit: '100kb' }));
 
   app.use('/api', healthRouter(runtime));
-  app.use('/api', sessionRouter(sessions));
+  app.use('/api', sessionRouter(sessions, attempts));
   app.use('/api', examRouter({ sessions, attempts, runtime }));
   app.use('/api', attemptRouter(sessions, attempts));
 

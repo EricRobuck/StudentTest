@@ -3,6 +3,7 @@ import { inTransaction, type Database } from './database.js';
 import type {
   AttemptQuestionRecord,
   AttemptRecord,
+  CommandLogRecord,
   Repositories,
   SessionRecord,
   SubmissionRecord,
@@ -182,5 +183,43 @@ export function createSqliteRepositories(db: Database): Repositories {
           .map(toSubmission);
       },
     },
+
+    commands: {
+      async add(e) {
+        return inTransaction(db, () => {
+          const row = db
+            .prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM command_log WHERE attempt_id = ?')
+            .get(e.attemptId);
+          const seq = Number(row?.next ?? 1);
+          db.prepare(
+            `INSERT INTO command_log (id, attempt_id, session_id, question_id, seq, command, cwd,
+               exit_code, flags, executed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(e.id, e.attemptId, e.sessionId, e.questionId, seq, e.command, e.cwd, e.exitCode, e.flags.join(','), e.executedAt);
+          return seq;
+        });
+      },
+      async listForAttempt(attemptId) {
+        return db
+          .prepare('SELECT * FROM command_log WHERE attempt_id = ? ORDER BY seq')
+          .all(attemptId)
+          .map(toCommand);
+      },
+    },
+  };
+}
+
+function toCommand(r: Row): CommandLogRecord {
+  return {
+    id: str(r.id),
+    attemptId: str(r.attempt_id),
+    sessionId: str(r.session_id),
+    questionId: strOrNull(r.question_id),
+    seq: Number(r.seq),
+    command: str(r.command),
+    cwd: str(r.cwd),
+    exitCode: r.exit_code === null ? null : Number(r.exit_code),
+    flags: str(r.flags).split(',').filter(Boolean),
+    executedAt: str(r.executed_at),
   };
 }

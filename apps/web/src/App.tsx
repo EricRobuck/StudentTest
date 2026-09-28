@@ -45,7 +45,13 @@ export function App() {
 
       {state.kind === 'completed' ? (
         <main className="exam-body exam-body-single">
-          <ResultsView result={state.result} />
+          <ResultsView
+            result={state.result}
+            onStartOver={async () => {
+              await api.newAttempt();
+              reload();
+            }}
+          />
         </main>
       ) : (
         <main className="exam-body">

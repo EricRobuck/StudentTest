@@ -6,6 +6,15 @@ import {
   type TerminalServerMessage,
 } from '@linuxlab/shared';
 import type { ContainerRuntime, ShellHandle } from '../containers/index.js';
+import { CommandMarkerParser, type LoggedCommand } from './commandMarkers.js';
+
+/** Callbacks from a bridge to the rest of the server. */
+export interface BridgeEvents {
+  /** The student is present (attached, detached, or typed). */
+  onActivity(): void;
+  /** The shell reported a completed command. */
+  onCommand(command: LoggedCommand): void;
+}
 
 /** The session and the container whose shell this bridge connects to. */
 export interface BridgeTarget {
@@ -37,13 +46,18 @@ export class TerminalBridge {
   private readonly restartTimes: number[] = [];
   private drainTimer: NodeJS.Timeout | undefined;
   private closed = false;
+  private markers = new CommandMarkerParser();
 
   constructor(
     private readonly target: BridgeTarget,
     private readonly runtime: ContainerRuntime,
     private readonly cfg: BridgeConfig,
-    private readonly onActivity: () => void,
+    private readonly events: BridgeEvents,
   ) {}
+
+  private onActivity(): void {
+    this.events.onActivity();
+  }
 
   get containerId(): string {
     return this.target.containerId;
@@ -85,6 +99,7 @@ export class TerminalBridge {
   /** Ends the terminal for good (session over). */
   close(code: number, reason: string): void {
     this.closed = true;
+    this.flushCommands();
     this.stopDrainWait();
     this.socket?.close(code, reason);
     this.socket = undefined;
@@ -117,6 +132,7 @@ export class TerminalBridge {
           return;
         }
         this.shell = shell;
+        this.markers = new CommandMarkerParser();
         shell.onData((chunk) => this.handleOutput(chunk));
         shell.onExit(() => void this.handleShellExit(shell));
         // The browser usually sends its real size while the shell is still
@@ -132,7 +148,12 @@ export class TerminalBridge {
     await this.shellStarting;
   }
 
-  private handleOutput(chunk: Buffer): void {
+  private handleOutput(raw: Buffer): void {
+    // Pull out command-log markers first: they are recorded, never displayed.
+    const { output: chunk, commands } = this.markers.push(raw);
+    for (const command of commands) this.events.onCommand(command);
+    if (chunk.length === 0) return;
+
     this.replay.push(chunk);
     this.replayBytes += chunk.length;
     while (this.replayBytes > this.cfg.replayBufferBytes && this.replay.length > 1) {
@@ -166,9 +187,15 @@ export class TerminalBridge {
     this.drainTimer = undefined;
   }
 
+  /** Reports a command that was still running (e.g. `exit` itself) when its shell ended. */
+  private flushCommands(): void {
+    for (const command of this.markers.flush()) this.events.onCommand(command);
+  }
+
   private async handleShellExit(shell: ShellHandle): Promise<void> {
     if (this.shell !== shell) return;
     this.shell = undefined;
+    this.flushCommands();
     // Nobody watching: a new shell is started on the next attach instead.
     if (this.closed || !this.socket) return;
 

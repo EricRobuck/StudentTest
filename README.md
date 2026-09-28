@@ -43,6 +43,8 @@ npm run containers:cleanup            # remove every container this project crea
 npm run smoke:terminal                # (backend running) terminal + security checks
 npm run smoke:grading                 # validators against a real container
 npm run smoke:scoring                 # (backend running) scoring, finish, exam rules
+npm run smoke:commands -- <url> <db>  # (backend running) command logging
+npm run commands:show                 # command history of the latest attempt (--all for every attempt)
 ```
 
 Try the stricter exam mode (no hints, hidden results, 2 attempts, 30 minutes)

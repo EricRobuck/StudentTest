@@ -282,3 +282,24 @@ is typed once in `packages/shared`.
   - `SAMPLE_EXAM_MODE=exam` runs the sample exam with exam-mode settings.
   - Verified by `npm run smoke:scoring` (practice mode incl. time-out when
     given the DB path; exam mode on a server started with SAMPLE_EXAM_MODE=exam).
+- **Phase 8** — Command logging (requirements §14).
+  - Hook in the image (`docker/student-ubuntu/command-hook.sh`, sourced from
+    `/etc/bash.bashrc`, so nested shells are covered). `PS0` reports each
+    command *before* it runs (history number, cwd, command, base64) and
+    `PROMPT_COMMAND` reports its exit status, as OSC 7337 sequences on the
+    terminal output. Both hooks are `readonly`, so `unset`/redefining them
+    fails — and the attempt is itself logged first. Ubuntu's
+    `HISTCONTROL=ignoreboth` is removed so repeats are logged.
+  - Server: `CommandMarkerParser` (per shell) strips markers from the
+    output before the replay buffer and the browser, handles markers split
+    across chunks, pairs command + exit status, de-duplicates by history
+    number, and flushes a still-running command when the shell ends.
+  - `CommandLogService` stores to `command_log` (migration 2) in arrival
+    order with the attempt's current question and server timestamps, and
+    flags commands that touch the logging machinery (`logging-tamper`).
+  - Only command lines are logged, never program input, so text typed at
+    password prompts is never stored.
+  - Still advisory evidence: a student could start a shell that skips the
+    system bashrc (`bash --norc`), but that command is logged and flagged.
+  - `npm run commands:show` prints logs until the instructor page (Phase 9).
+    Verified by `npm run smoke:commands` (parser unit checks + end to end).

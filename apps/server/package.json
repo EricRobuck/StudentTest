@@ -11,6 +11,8 @@
     "smoke:terminal": "tsx scripts/smoke-terminal.ts",
     "smoke:grading": "tsx scripts/smoke-grading.ts",
     "smoke:scoring": "tsx scripts/smoke-scoring.ts",
+    "smoke:commands": "tsx scripts/smoke-commands.ts",
+    "commands:show": "tsx scripts/show-commands.ts",
     "containers:cleanup": "tsx scripts/cleanup-containers.ts"
   },
   "dependencies": {

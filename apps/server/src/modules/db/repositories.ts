@@ -48,6 +48,19 @@ export interface SubmissionRecord {
   submittedAt: string;
 }
 
+export interface CommandLogRecord {
+  id: string;
+  attemptId: string;
+  sessionId: string;
+  questionId: string | null;
+  seq: number;
+  command: string;
+  cwd: string;
+  exitCode: number | null;
+  flags: string[];
+  executedAt: string;
+}
+
 export interface AttemptRepository {
   create(attempt: AttemptRecord, questions: AttemptQuestionRecord[]): Promise<void>;
   get(id: string): Promise<AttemptRecord | undefined>;
@@ -76,8 +89,15 @@ export interface SubmissionRepository {
   listForAttempt(attemptId: string): Promise<SubmissionRecord[]>;
 }
 
+export interface CommandLogRepository {
+  /** Appends with the next sequence number for the attempt; returns that number. */
+  add(entry: Omit<CommandLogRecord, 'seq'>): Promise<number>;
+  listForAttempt(attemptId: string): Promise<CommandLogRecord[]>;
+}
+
 export interface Repositories {
   attempts: AttemptRepository;
   sessions: SessionRepository;
   submissions: SubmissionRepository;
+  commands: CommandLogRepository;
 }

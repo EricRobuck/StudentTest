@@ -3,6 +3,7 @@ import { TERMINAL_CLOSE } from '@linuxlab/shared';
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { AttemptService } from './modules/attempts/attemptService.js';
+import { CommandLogService } from './modules/commandLog/commandLogService.js';
 import { createDockerRuntime, startReaper } from './modules/containers/index.js';
 import { createSqliteRepositories, openDatabase } from './modules/db/index.js';
 import { getActiveExam, getExamById } from './modules/exams/examService.js';
@@ -15,7 +16,11 @@ const repos = createSqliteRepositories(db);
 const runtime = createDockerRuntime(config.containers);
 const attempts = new AttemptService(repos, getExamById);
 const sessions = new SessionManager(runtime, repos, attempts, getActiveExam);
-const hub = new TerminalHub(runtime, config.terminal, (id) => void sessions.touch(id));
+const commandLog = new CommandLogService(repos);
+const hub = new TerminalHub(runtime, config.terminal, {
+  onActivity: (id) => void sessions.touch(id),
+  onCommand: (id, command) => commandLog.record(id, command),
+});
 sessions.onEnvironmentEnded((sessionId, reason) =>
   hub.closeSession(sessionId, TERMINAL_CLOSE.ENDED, `Environment ended (${reason})`),
 );
@@ -63,8 +68,10 @@ function shutdown(signal: string): void {
   // Containers are kept: sessions are in the database, so students reconnect
   // to the same environment when the server comes back.
   server.close(() => {
-    db.close();
-    process.exit(0);
+    void commandLog.flush().finally(() => {
+      db.close();
+      process.exit(0);
+    });
   });
   setTimeout(() => process.exit(1), 5000).unref();
 }

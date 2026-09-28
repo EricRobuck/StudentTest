@@ -114,6 +114,8 @@ export interface ExamResultView {
   score: ScoreView;
   /** 0..100, rounded to one decimal. */
   percentage: number;
+  /** Practice exams can be taken again; real exams cannot. */
+  canRetake: boolean;
   questions: Array<{
     questionId: string;
     number: number;

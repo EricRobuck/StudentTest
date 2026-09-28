@@ -75,5 +75,8 @@ export const api = {
 
   finish: () => request<ExamResultView>('POST', '/api/attempt/finish'),
 
+  /** Practice exams only: start over with a fresh attempt and Linux environment. */
+  newAttempt: () => request<SessionResponse>('POST', '/api/session/new-attempt'),
+
   result: (signal?: AbortSignal) => request<ExamResultView>('GET', '/api/attempt/result', { signal }),
 };

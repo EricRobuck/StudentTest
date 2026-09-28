@@ -1,7 +1,13 @@
 import { TERMINAL_CLOSE } from '@linuxlab/shared';
 import type { WebSocket } from 'ws';
 import type { ContainerRuntime } from '../containers/index.js';
+import type { LoggedCommand } from './commandMarkers.js';
 import { TerminalBridge, type BridgeConfig, type BridgeTarget } from './terminalBridge.js';
+
+export interface HubEvents {
+  onActivity(sessionId: string): void;
+  onCommand(sessionId: string, command: LoggedCommand): void;
+}
 
 /** Owns one TerminalBridge per active exam session. */
 export class TerminalHub {
@@ -10,7 +16,7 @@ export class TerminalHub {
   constructor(
     private readonly runtime: ContainerRuntime,
     private readonly cfg: BridgeConfig,
-    private readonly onActivity: (sessionId: string) => void,
+    private readonly events: HubEvents,
   ) {}
 
   attach(target: BridgeTarget, ws: WebSocket): void {
@@ -22,8 +28,12 @@ export class TerminalHub {
       bridge = undefined;
     }
     if (!bridge) {
-      bridge = new TerminalBridge(target, this.runtime, this.cfg, () => this.onActivity(target.sessionId));
-      this.bridges.set(target.sessionId, bridge);
+      const id = target.sessionId;
+      bridge = new TerminalBridge(target, this.runtime, this.cfg, {
+        onActivity: () => this.events.onActivity(id),
+        onCommand: (command) => this.events.onCommand(id, command),
+      });
+      this.bridges.set(id, bridge);
     }
     bridge.attach(ws);
   }

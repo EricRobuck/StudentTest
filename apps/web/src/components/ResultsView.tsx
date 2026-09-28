@@ -1,9 +1,39 @@
+import { useState } from 'react';
 import type { ExamResultView } from '@linuxlab/shared';
 
+interface ResultsViewProps {
+  result: ExamResultView;
+  /** Starts a fresh practice attempt; only offered when the exam allows retakes. */
+  onStartOver: () => Promise<void>;
+}
+
 /** Final results after the exam ends (requirements §16). */
-export function ResultsView({ result }: { result: ExamResultView }) {
+export function ResultsView({ result, onStartOver }: ResultsViewProps) {
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startOver = async () => {
+    setStarting(true);
+    setError(null);
+    try {
+      await onStartOver();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStarting(false);
+    }
+  };
+
   return (
     <section className="results" aria-label="Exam results">
+      {result.canRetake && (
+        <div className="results-actions">
+          <button type="button" onClick={() => void startOver()} disabled={starting}>
+            {starting ? 'Starting…' : 'Start a new attempt'}
+          </button>
+          <span className="muted">Practice mode: you get a fresh Linux environment and a new score.</span>
+          {error && <p className="error-text">{error}</p>}
+        </div>
+      )}
       <h2>{result.examTitle}</h2>
       <p className="muted">
         {result.endReason === 'time_expired' ? 'Time ran out — your exam was submitted automatically.' : 'Exam finished.'}{' '}

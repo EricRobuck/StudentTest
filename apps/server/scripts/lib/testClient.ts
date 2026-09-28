@@ -28,10 +28,13 @@ export function stripAnsi(text: string): string {
 export function openTerminal(base: string, headers: Record<string, string>) {
   const ws = new WebSocket(base.replace(/^http/, 'ws') + TERMINAL_WS_PATH, { headers });
   let output = '';
+  let raw = '';
   const control: Array<Record<string, unknown>> = [];
   ws.on('message', (data, isBinary) => {
-    if (isBinary) output = stripAnsi(output + data.toString());
-    else control.push(JSON.parse(data.toString()) as Record<string, unknown>);
+    if (isBinary) {
+      raw += data.toString();
+      output = stripAnsi(output + data.toString());
+    } else control.push(JSON.parse(data.toString()) as Record<string, unknown>);
   });
   const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)));
   const failed = new Promise<string>((resolve) =>
@@ -44,6 +47,10 @@ export function openTerminal(base: string, headers: Record<string, string>) {
     control,
     get output() {
       return output;
+    },
+    /** Exactly what the browser received, escape sequences included. */
+    get raw() {
+      return raw;
     },
     opened: new Promise<void>((resolve, reject) => {
       ws.on('open', () => resolve());

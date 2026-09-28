@@ -253,6 +253,16 @@ button.danger {
   padding: 1.5rem;
 }
 
+.results-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .results-score {
   display: flex;
   align-items: baseline;

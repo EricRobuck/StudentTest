@@ -71,4 +71,25 @@ export const migrations: Migration[] = [
       CREATE INDEX submissions_attempt ON submissions(attempt_id, question_id);
     `,
   },
+  {
+    version: 2,
+    name: 'command log',
+    sql: `
+      -- Every command line a student ran (requirements §14). Reported by the
+      -- in-container bash hook, so it is advisory evidence, not tamper-proof.
+      CREATE TABLE command_log (
+        id          TEXT PRIMARY KEY,
+        attempt_id  TEXT NOT NULL REFERENCES exam_attempts(id),
+        session_id  TEXT NOT NULL REFERENCES sessions(id),
+        question_id TEXT,                    -- question open at the time
+        seq         INTEGER NOT NULL,        -- order within the attempt
+        command     TEXT NOT NULL,
+        cwd         TEXT NOT NULL,
+        exit_code   INTEGER,
+        flags       TEXT NOT NULL DEFAULT '', -- e.g. 'logging-tamper'
+        executed_at TEXT NOT NULL,           -- server clock
+        UNIQUE (attempt_id, seq)
+      );
+    `,
+  },
 ];

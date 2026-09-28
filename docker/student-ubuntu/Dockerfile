@@ -40,8 +40,16 @@ RUN (userdel -r ubuntu 2>/dev/null || true) \
 # no-new-privileges at runtime, the student has no way to gain root.
 RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} + || true
 
+# Command logging hook (root-owned, read-only for the student), loaded by
+# every interactive bash via the system-wide bashrc. Ubuntu's default
+# HISTCONTROL=ignoreboth is removed because it would hide repeated commands.
+RUN install -d -o root -g root -m 0755 /etc/linuxlab
+COPY --chown=root:root --chmod=0644 command-hook.sh /etc/linuxlab/command-hook.sh
+RUN printf '\n# Linux Lab command logging\n. /etc/linuxlab/command-hook.sh\n' >> /etc/bash.bashrc \
+ && sed -i '/^HISTCONTROL=/d' /etc/skel/.bashrc /home/student/.bashrc
+
 LABEL org.linuxlab.image="student-ubuntu" \
-      org.linuxlab.version="1"
+      org.linuxlab.version="2"
 
 USER student
 WORKDIR /home/student

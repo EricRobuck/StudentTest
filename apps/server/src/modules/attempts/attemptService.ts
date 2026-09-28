@@ -167,6 +167,7 @@ export class AttemptService {
       endReason: attempt.endReason ?? 'finished',
       score,
       percentage: score.max === 0 ? 0 : Math.round((score.earned / score.max) * 1000) / 10,
+      canRetake: exam.settings.mode === 'practice',
       questions: orderedQuestions(exam).map((q, i) => {
         const mine = subs.filter((s) => s.questionId === q.id);
         const best = bestOf(mine);
