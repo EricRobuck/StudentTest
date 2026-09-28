@@ -21,7 +21,7 @@ export function createApp({ runtime, sessions }: AppDeps): Express {
 
   app.use('/api', healthRouter(runtime));
   app.use('/api', sessionRouter(sessions));
-  app.use('/api', examRouter(sessions));
+  app.use('/api', examRouter(sessions, runtime));
 
   // The backend only serves /api and /ws. Anyone who opens it directly in a
   // browser is sent to the web app instead of seeing "Cannot GET /".

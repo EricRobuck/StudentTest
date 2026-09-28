@@ -45,6 +45,23 @@ export interface StudentQuestion {
   hint?: string;
 }
 
+/** Outcome of one validation rule, as shown to the student. */
+export interface RuleResultView {
+  passed: boolean;
+  /** Short explanation, e.g. "Your terminal is in /home/student, not /etc". */
+  message: string;
+}
+
+/** Response body of POST /api/exam/questions/:questionId/submit. */
+export interface SubmitResult {
+  questionId: string;
+  passed: boolean;
+  pointsAwarded: number;
+  maxPoints: number;
+  rules: RuleResultView[];
+  gradedAt: string;
+}
+
 /** Response body of GET /api/exam. */
 export interface StudentExam {
   id: string;

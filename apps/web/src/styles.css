@@ -148,10 +148,56 @@ code {
   font-weight: 600;
 }
 
+.progress-step.passed {
+  background: #dcfce7;
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.progress-step.failed {
+  background: #fee2e2;
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
 .progress-step.current {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.progress-step.unanswered.current {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+.result {
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin-top: 1rem;
+}
+
+.result ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.result-pass {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #14532d;
+}
+
+.result-fail {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #7f1d1d;
+}
+
+.result-error {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #78350f;
 }
 
 .question-meta {

@@ -1,4 +1,6 @@
-import type { StudentExam } from '@linuxlab/shared';
+import { useState } from 'react';
+import type { StudentExam, SubmitResult } from '@linuxlab/shared';
+import { api } from './api/client';
 import { BackendStatus } from './components/BackendStatus';
 import { ExamProgress } from './components/ExamProgress';
 import { QuestionPanel } from './components/QuestionPanel';
@@ -58,17 +60,44 @@ export function App() {
 
 function QuestionArea({ exam, sessionId }: { exam: StudentExam; sessionId: string }) {
   const { index, goTo } = useCurrentQuestion(sessionId, exam.questions.length);
+  // Latest result per question. Kept in the browser only until Phase 7 stores scores on the server.
+  const [results, setResults] = useState<Record<string, SubmitResult>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const question = exam.questions[index];
   if (!question) return null;
 
+  const navigate = (next: number) => {
+    setSubmitError(null);
+    goTo(next);
+  };
+
+  const submit = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const result = await api.submit(question.id);
+      setResults((prev) => ({ ...prev, [result.questionId]: result }));
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
-      <ExamProgress questions={exam.questions} currentIndex={index} onSelect={goTo} />
+      <ExamProgress questions={exam.questions} currentIndex={index} results={results} onSelect={navigate} />
       <QuestionPanel
         question={question}
         total={exam.questions.length}
-        onPrevious={() => goTo(index - 1)}
-        onNext={() => goTo(index + 1)}
+        result={results[question.id]}
+        submitting={submitting}
+        submitError={submitError}
+        onSubmit={() => void submit()}
+        onPrevious={() => navigate(index - 1)}
+        onNext={() => navigate(index + 1)}
       />
     </>
   );

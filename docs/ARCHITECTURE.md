@@ -237,3 +237,22 @@ is typed once in `packages/shared`.
     sessionStorage until Phase 7 moves progress to the server.
   - The public repo contains the sample answers; real exams must live in
     the database, not in source.
+- **Phase 6** — Validators (`modules/grading/`).
+  - `Validator<S>` interface + compile-time-checked registry: adding a
+    validator = extend `ValidatorSpec`, add one file, add one registry line.
+  - `gradeQuestion()` runs rules sequentially, combines `all`/`any`, and
+    turns validator exceptions into failed rules. `RuleResult.score` (0..1)
+    is there for future partial credit; `detail` is instructor-only.
+  - Probes (`inspect.ts`): `stat -c … -- path` as root (does not follow a
+    final symlink, so a symlink can't impersonate a file/dir), `head -c` for
+    contents (root, so student permissions don't matter), paths checked by
+    `assertSafePath`.
+  - `current_directory`: the terminal shell is the newest `bash` with PPID 0
+    (only `docker exec` can create those) that owns a TTY; we read the cwd of
+    the TTY's foreground process group (handles nested shells, `less`, and
+    ignores background jobs). Runs as `student`, because reading another
+    user's `/proc/<pid>/cwd` would need CAP_SYS_PTRACE.
+  - `POST /api/exam/questions/:id/submit` (Origin + session checked, one
+    grading run per session at a time). Results are not stored yet (Phase 7).
+  - Verified by `npm run smoke:grading` (18 scenarios incl. symlink, wrong
+    case, background `cd`, nested bash, chmod 000).

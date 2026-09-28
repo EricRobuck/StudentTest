@@ -1,4 +1,10 @@
-import type { ApiError, HealthResponse, SessionResponse, StudentExam } from '@linuxlab/shared';
+import type {
+  ApiError,
+  HealthResponse,
+  SessionResponse,
+  StudentExam,
+  SubmitResult,
+} from '@linuxlab/shared';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -41,4 +47,8 @@ export const api = {
 
   /** The student's exam (questions only; answers never leave the server). */
   exam: (signal?: AbortSignal) => request<StudentExam>('GET', '/api/exam', signal),
+
+  /** Asks the server to check the container's current state for this question. */
+  submit: (questionId: string) =>
+    request<SubmitResult>('POST', `/api/exam/questions/${encodeURIComponent(questionId)}/submit`),
 };

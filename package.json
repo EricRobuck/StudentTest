@@ -16,6 +16,7 @@
     "image:build": "docker build -t linuxlab/student-ubuntu:24.04 docker/student-ubuntu",
     "smoke:containers": "npm run smoke:containers -w @linuxlab/server --",
     "smoke:terminal": "npm run smoke:terminal -w @linuxlab/server --",
+    "smoke:grading": "npm run smoke:grading -w @linuxlab/server",
     "containers:cleanup": "npm run containers:cleanup -w @linuxlab/server"
   },
   "devDependencies": {
