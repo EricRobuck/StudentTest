@@ -3,7 +3,9 @@
 A web platform where students complete Linux tasks in a real, isolated Bash shell
 inside a Docker container, and the platform grades the resulting system state.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and
+[docs/SECURITY.md](docs/SECURITY.md) for the security review and the
+checklist to complete before real students use it.
 
 ## Requirements
 
@@ -46,6 +48,7 @@ npm run smoke:scoring                 # (backend running) scoring, finish, exam 
 npm run smoke:commands -- <url> <db>  # (backend running) command logging
 npm run commands:show                 # command history of the latest attempt (--all for every attempt)
 npm run smoke:instructor -- <url> <pw> # (backend running) instructor access + results views
+npm run smoke:security                # student attack attempts (see docs/SECURITY.md)
 ```
 
 Try the stricter exam mode (no hints, hidden results, 2 attempts, 30 minutes)

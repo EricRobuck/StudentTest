@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Response } from 'express';
 import type { SessionResponse } from '@linuxlab/shared';
 import { config } from '../config.js';
 import { sendError } from '../http/errors.js';
+import { clientAddress, sendRateLimited, type Limiters } from '../http/rateLimit.js';
 import { requireSession, sessionOf } from '../http/requireSession.js';
 import { readCookie, requireAllowedOrigin, SESSION_COOKIE } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
@@ -18,7 +19,9 @@ const USER_FACING: Partial<Record<ContainerError['code'], number>> = {
 
 type SessionResult = Awaited<ReturnType<SessionManager['resumeOrCreate']>>;
 
-export function sessionRouter(sessions: SessionManager, attempts: AttemptService): Router {
+const NEW_SESSION_LIMIT_MESSAGE = 'Too many new exam sessions from your network. Please wait a few minutes.';
+
+export function sessionRouter(sessions: SessionManager, attempts: AttemptService, limiters: Limiters): Router {
   const router = Router();
   const sameOrigin = requireAllowedOrigin(config.security.allowedOrigins);
 
@@ -27,6 +30,12 @@ export function sessionRouter(sessions: SessionManager, attempts: AttemptService
   router.post('/session', sameOrigin, async (req, res, next) => {
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
     try {
+      // Only creating a session (a container) is limited; resuming never is.
+      const existing = token ? await sessions.findByToken(token) : undefined;
+      if (!existing) {
+        const retryAfter = limiters.newSessions.hit(clientAddress(req));
+        if (retryAfter > 0) return sendRateLimited(res, retryAfter, NEW_SESSION_LIMIT_MESSAGE);
+      }
       respond(res, await sessions.resumeOrCreate(token), token);
     } catch (err) {
       handleError(err, res, next);
@@ -35,8 +44,10 @@ export function sessionRouter(sessions: SessionManager, attempts: AttemptService
 
   // POST /api/session/new-attempt — after finishing a PRACTICE exam, start
   // over with a fresh attempt and Linux environment. Refused for real exams.
-  router.post('/session/new-attempt', sameOrigin, requireSession(sessions), async (_req, res, next) => {
+  router.post('/session/new-attempt', sameOrigin, requireSession(sessions), async (req, res, next) => {
     try {
+      const retryAfter = limiters.newSessions.hit(clientAddress(req));
+      if (retryAfter > 0) return sendRateLimited(res, retryAfter, NEW_SESSION_LIMIT_MESSAGE);
       const attempt = await attempts.get(sessionOf(res).attemptId);
       if (attempt?.status !== 'completed') {
         return sendError(res, 409, 'IN_PROGRESS', 'Finish the current attempt first');

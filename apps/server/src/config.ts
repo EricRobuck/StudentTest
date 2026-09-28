@@ -72,11 +72,27 @@ export const config = {
     allowedOrigins: [
       ...new Set(readList('ALLOWED_ORIGINS', [webUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'])),
     ],
-    // Set COOKIE_SECURE=true when served over HTTPS.
-    cookieSecure: process.env.COOKIE_SECURE === 'true',
+    // Cookies are sent over HTTPS only when the site is served over HTTPS
+    // (automatic when WEB_URL is https://; COOKIE_SECURE=true/false overrides).
+    cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : webUrl.startsWith('https://'),
     // Shared instructor password (interim until instructor accounts exist).
     // Unset = instructor pages disabled. There is deliberately no default.
     instructorPassword: readInstructorPassword(),
+
+    rateLimits: {
+      // New exam sessions (each creates a container) per client address per
+      // 10 minutes. A whole classroom behind one school NAT shares an
+      // address, so keep this above the class size. Resuming never counts.
+      newSessionsPerAddress: readPositiveInt('NEW_SESSIONS_PER_IP', 60),
+      // Submit clicks per session per minute (each runs checks in the container).
+      submitsPerSessionPerMinute: 20,
+      // Other state-changing requests per session per minute.
+      writesPerSessionPerMinute: 120,
+      // Command-log entries: burst size, then this many per second; hard cap per attempt.
+      commandLogBurst: 40,
+      commandLogPerSecond: 5,
+      commandLogMaxPerAttempt: 5000,
+    },
   },
 
   // SQLite file. Default: <repo>/data/linuxlab.sqlite (git-ignored).
@@ -109,6 +125,7 @@ export const config = {
     nanoCpus: 500_000_000, // 0.5 CPU
     pidsLimit: 128,
     tmpSizeMb: 64,
+    homeSizeMb: 64,
     maxFileSizeBytes: 50 * 1024 * 1024,
     maxOpenFiles: 1024,
     maxConcurrent: 50,

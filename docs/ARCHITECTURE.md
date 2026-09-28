@@ -327,3 +327,12 @@ is typed once in `packages/shared`.
     React text with control characters made visible (`printable`).
   - Verified by `npm run smoke:instructor` (access control, lockout,
     grader detail, commands, time, snapshot).
+- **Phase 10** — Security review; see [SECURITY.md](SECURITY.md).
+  - All student-writable paths are size-limited tmpfs (home populated from
+    `/etc/skel` at container start); scripts may run from student areas.
+  - Rate limits (`http/rateLimit.ts`): new sessions per address, submits and
+    writes per session; command-log token bucket with `log-flood` flag.
+  - Security headers on every API response; no framing of pages; production
+    CSP in `vite.config.ts`; 16 KB JSON limit with clean 413/400 errors;
+    `Secure` cookies automatic over HTTPS; student text JSON-quoted in logs.
+  - Verified by `npm run smoke:security` (21 attack checks) + all earlier suites.

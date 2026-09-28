@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { StudentExam } from '@linuxlab/shared';
 import { config } from '../config.js';
 import { sendError } from '../http/errors.js';
+import { rateLimit, type Limiters } from '../http/rateLimit.js';
 import { requireSession, sessionOf } from '../http/requireSession.js';
 import { requireAllowedOrigin } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
@@ -22,11 +23,13 @@ export interface ExamRouteDeps {
   sessions: SessionManager;
   attempts: AttemptService;
   runtime: ContainerRuntime;
+  limiters: Limiters;
 }
 
-export function examRouter({ sessions, attempts, runtime }: ExamRouteDeps): Router {
+export function examRouter({ sessions, attempts, runtime, limiters }: ExamRouteDeps): Router {
   const router = Router();
   const sameOrigin = requireAllowedOrigin(config.security.allowedOrigins);
+  const submitLimit = rateLimit(limiters.submits, (_req, res) => sessionOf(res).id, 'Too many submissions. Wait a moment and try again.');
 
   // GET /api/exam — the exam this student is taking, without validators or answers.
   router.get('/exam', requireSession(sessions), async (_req, res, next) => {
@@ -42,7 +45,7 @@ export function examRouter({ sessions, attempts, runtime }: ExamRouteDeps): Rout
   });
 
   // POST /api/exam/questions/:questionId/submit — grade the container's current state.
-  router.post('/exam/questions/:questionId/submit', sameOrigin, requireSession(sessions), async (req, res, next) => {
+  router.post('/exam/questions/:questionId/submit', sameOrigin, requireSession(sessions), submitLimit, async (req, res, next) => {
     const questionId = String(req.params.questionId);
     if (!QUESTION_ID.test(questionId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid question id');
     try {

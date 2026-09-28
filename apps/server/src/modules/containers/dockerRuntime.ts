@@ -18,7 +18,12 @@ const LABEL_SESSION = 'linuxlab.session';
 const LABEL_INSTANCE = 'linuxlab.instance';
 const SESSION_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
 
-const SHELL_ENV = ['TERM=xterm-256color', 'LANG=C.UTF-8', 'HOME=/home/student', 'USER=student'];
+const HOME = '/home/student';
+const SHELL_ENV = ['TERM=xterm-256color', 'LANG=C.UTF-8', `HOME=${HOME}`, 'USER=student'];
+
+// The home directory is a fresh tmpfs, so fill it from the image's skeleton
+// once the container starts. A constant script; nothing is interpolated.
+const POPULATE_HOME = `cp -a /etc/skel/. ${HOME}/ && mkdir -p ${HOME}/Documents ${HOME}/Downloads ${HOME}/Desktop && chown -R 1000:1000 ${HOME}`;
 
 const DEFAULT_EXEC_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
@@ -51,7 +56,18 @@ export function createDockerRuntime(cfg: ContainerConfig, docker = new Docker())
       { Name: 'nofile', Soft: cfg.maxOpenFiles, Hard: cfg.maxOpenFiles },
       { Name: 'fsize', Soft: cfg.maxFileSizeBytes, Hard: cfg.maxFileSizeBytes },
     ],
-    Tmpfs: { '/tmp': `rw,nosuid,nodev,size=${cfg.tmpSizeMb}m,mode=1777` },
+    // Every directory the student can write to is a size-limited tmpfs, so
+    // nothing a student does can fill the host's disk (the image's root
+    // filesystem is only writable by root, i.e. by setup/grading). tmpfs
+    // pages count against the container's memory limit too. `exec` lets
+    // students run their own scripts (chmod +x; ./script.sh) as expected.
+    Tmpfs: {
+      '/tmp': `rw,exec,nosuid,nodev,size=${cfg.tmpSizeMb}m,mode=1777`,
+      '/var/tmp': 'rw,exec,nosuid,nodev,size=16m,mode=1777',
+      '/run/lock': 'rw,noexec,nosuid,nodev,size=1m,mode=1777',
+      [HOME]: `rw,exec,nosuid,nodev,size=${cfg.homeSizeMb}m,mode=0755,uid=1000,gid=1000`,
+    },
+    ShmSize: 16 * 1024 * 1024,
 
     // Lifecycle
     Init: true, // reap zombie processes
@@ -137,6 +153,8 @@ export function createDockerRuntime(cfg: ContainerConfig, docker = new Docker())
 
     try {
       await container.start();
+      const home = await exec(container.id, ['/bin/bash', '-c', POPULATE_HOME], { user: 'root', timeoutMs: 10_000 });
+      if (home.exitCode !== 0) throw new Error(`home setup failed: ${home.stderr.trim().slice(0, 200)}`);
     } catch (err) {
       await container.remove({ force: true }).catch(() => undefined);
       throw new ContainerError('DOCKER_ERROR', `Could not start container: ${errorMessage(err)}`, {

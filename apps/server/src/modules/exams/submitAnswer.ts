@@ -57,7 +57,8 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
     });
     console.log(
       `[grading] attempt ${attempt.id} ${question.id} #${attemptNumber}: ${grade.passed ? 'PASS' : 'FAIL'} ` +
-        grade.rules.map((r) => `[${r.type} ${r.passed ? 'ok' : 'x'} ${r.detail ?? ''}]`).join(' '),
+        // detail can hold student-controlled text: JSON-quote it so it can't forge log lines.
+        grade.rules.map((r) => `[${r.type} ${r.passed ? 'ok' : 'x'} ${JSON.stringify(r.detail ?? '')}]`).join(' '),
     );
 
     const after = await deps.attempts.submissions(attempt.id);
