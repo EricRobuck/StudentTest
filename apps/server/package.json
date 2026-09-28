@@ -1,0 +1,26 @@
+{
+  "name": "@linuxlab/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "smoke:containers": "tsx scripts/smoke-containers.ts",
+    "smoke:terminal": "tsx scripts/smoke-terminal.ts",
+    "containers:cleanup": "tsx scripts/cleanup-containers.ts"
+  },
+  "dependencies": {
+    "dockerode": "^5.0.1",
+    "express": "^5.2.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^4.0.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.3",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.23.15"
+  }
+}

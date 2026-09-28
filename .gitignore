@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+
+# SQLite database files (created in later phases)
+data/
+*.sqlite
+*.sqlite-journal
+*.db
+
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

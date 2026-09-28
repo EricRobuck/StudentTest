@@ -1,0 +1,25 @@
+{
+  "name": "linux-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web-based Linux practical exam platform (MVP)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev -w @linuxlab/server\" \"npm run dev -w @linuxlab/web\"",
+    "dev:server": "npm run dev -w @linuxlab/server",
+    "dev:web": "npm run dev -w @linuxlab/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "image:build": "docker build -t linuxlab/student-ubuntu:24.04 docker/student-ubuntu",
+    "smoke:containers": "npm run smoke:containers -w @linuxlab/server --",
+    "smoke:terminal": "npm run smoke:terminal -w @linuxlab/server --",
+    "containers:cleanup": "npm run containers:cleanup -w @linuxlab/server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "typescript": "^7.0.2"
+  }
+}

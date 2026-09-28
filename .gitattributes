@@ -1,0 +1,3 @@
+# Keep LF line endings everywhere. Files in this repo end up inside Linux
+# containers (Dockerfile, setup scripts), where CRLF breaks shell commands.
+* text=auto eol=lf
