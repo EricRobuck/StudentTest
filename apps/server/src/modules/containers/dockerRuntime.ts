@@ -8,6 +8,7 @@ import {
   type ExecResult,
   type RuntimeStatus,
   type SessionContainer,
+  type CreateContainerOptions,
   type ShellHandle,
 } from './types.js';
 
@@ -116,7 +117,22 @@ export function createDockerRuntime(cfg: ContainerConfig, docker = new Docker())
     }));
   }
 
-  async function createSessionContainer(sessionId: string): Promise<SessionContainer> {
+  /**
+   * Admin exercises ("Students can use sudo"): the one relaxation of the
+   * lockdown. no-new-privileges must go, or setuid sudo refuses to run; root
+   * inside the container gets a short, fixed list of extra powers, and still
+   * none for networking, mounting, kernel modules, raw devices or ptrace.
+   */
+  function hostConfigFor(options: CreateContainerOptions): Docker.HostConfig {
+    if (!options.allowSudo) return hostConfig;
+    return {
+      ...hostConfig,
+      SecurityOpt: [],
+      CapAdd: [...(hostConfig.CapAdd ?? []), 'SETUID', 'SETGID', 'FSETID', 'KILL', 'AUDIT_WRITE'],
+    };
+  }
+
+  async function createSessionContainer(sessionId: string, options: CreateContainerOptions = {}): Promise<SessionContainer> {
     if (!SESSION_ID_PATTERN.test(sessionId)) {
       throw new ContainerError('INVALID_INPUT', 'Invalid session id');
     }
@@ -143,7 +159,7 @@ export function createDockerRuntime(cfg: ContainerConfig, docker = new Docker())
         Cmd: ['sleep', 'infinity'],
         NetworkDisabled: true,
         Labels: { [LABEL_MANAGED]: 'true', [LABEL_SESSION]: sessionId, [LABEL_INSTANCE]: cfg.instanceId },
-        HostConfig: hostConfig,
+        HostConfig: hostConfigFor(options),
       });
     } catch (err) {
       throw new ContainerError('DOCKER_ERROR', `Could not create container: ${errorMessage(err)}`, {

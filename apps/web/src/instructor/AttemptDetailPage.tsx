@@ -8,12 +8,13 @@ import type {
 } from '@linuxlab/shared';
 import { instructorApi } from '../api/client';
 import { TaskText } from '../components/TaskText';
-import { StatusBadge, StudentLabel } from './AttemptsPage';
+import { confirmDelete, isLocked, StatusBadge, StudentLabel, UnlockButton } from './AttemptsPage';
 import { formatDateTime, formatSeconds, formatTime, printable } from './format';
 
 export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; onBack: () => void }) {
   const [detail, setDetail] = useState<AttemptDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -24,7 +25,7 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
         if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err));
       });
     return () => controller.abort();
-  }, [attemptId]);
+  }, [attemptId, reloadKey]);
 
   if (error) return <p className="error-text">{error}</p>;
   if (!detail) return <p className="muted">Loading attempt…</p>;
@@ -42,8 +43,29 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
             <StudentLabel summary={s} />
             {s.className && <span className="muted"> · {s.className}</span>}
           </h2>
-          <StatusBadge summary={s} />
+          <div className="header-right">
+            <StatusBadge summary={s} />
+            {isLocked(s) && <UnlockButton attemptId={s.id} onUnlocked={() => setReloadKey((n) => n + 1)} />}
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                if (!confirmDelete([s])) return;
+                instructorApi
+                  .deleteAttempt(s.id)
+                  .then(onBack)
+                  .catch((err: unknown) => window.alert(err instanceof Error ? err.message : String(err)));
+              }}
+            >
+              Delete attempt
+            </button>
+          </div>
         </div>
+        {isLocked(s) && (
+          <p className="result result-fail">
+            Locked at {formatDateTime(s.lockedAt)}: the student {s.lockReason ?? 'left the test screen'}.
+          </p>
+        )}
         <dl className="facts">
           <dt>Exam</dt>
           <dd>
@@ -67,7 +89,30 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
             {s.commandCount}
             {s.flaggedCommandCount > 0 && <span className="flag"> · ⚠ {s.flaggedCommandCount} flagged</span>}
           </dd>
+          <dt>Left the screen</dt>
+          <dd>{s.timesLeft === 0 ? 'Never' : <span className="flag">{s.timesLeft} time{s.timesLeft === 1 ? '' : 's'}</span>}</dd>
         </dl>
+        {detail.integrityEvents.length > 0 && (
+          <>
+            <h3>Leaving the test screen</h3>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">What happened</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.integrityEvents.map((e, i) => (
+                  <tr key={i}>
+                    <td>{formatDateTime(e.at)}</td>
+                    <td>{e.type === 'left' ? <span className="flag">🔒 Locked: {e.reason}</span> : `🔓 ${e.reason}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
       </section>
 
       {detail.questions.map((q) => (

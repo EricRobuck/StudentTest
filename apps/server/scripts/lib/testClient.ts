@@ -71,14 +71,17 @@ export function openTerminal(base: string, headers: Record<string, string>) {
 }
 
 /**
- * The start screen: begins an exam as a test student. Uses a class from the
- * server's CLASS_LIST when one is configured.
+ * The start screen: begins a test as a test student. Uses a class from the
+ * server's CLASS_LIST when one is configured, and the given test (default:
+ * the sample exam if open, else the first open test).
  */
-export async function startStudent(http: ReturnType<typeof createHttpClient>, name = 'Test Student') {
-  const { body } = await http.call<{ classes: string[] | null }>('GET', '/api/classes');
+export async function startStudent(http: ReturnType<typeof createHttpClient>, name = 'Test Student', examId?: string) {
+  const { body } = await http.call<import('@linuxlab/shared').StartOptionsResponse>('GET', '/api/start-options');
+  const chosen = examId ?? body.exams.find((e) => e.id === 'linux-basics-sample')?.id ?? body.exams[0]?.id ?? 'none';
   return http.call<import('@linuxlab/shared').SessionResponse>('POST', '/api/session/start', {
     name,
     className: body.classes?.[0] ?? 'CS120-TEST',
+    examId: chosen,
   });
 }
 

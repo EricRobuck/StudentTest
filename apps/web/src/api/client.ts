@@ -1,9 +1,17 @@
 import type {
+  AiStatus,
   ApiError,
   AttemptDetail,
+  ExamDetail,
+  ExamSettings,
+  ExamSummary,
+  GenerateQuestionsRequest,
+  GenerateQuestionsResponse,
+  InstructorQuestion,
+  QuestionContent,
   AttemptSummary,
   AttemptView,
-  ClassListResponse,
+  StartOptionsResponse,
   ExamResultView,
   HealthResponse,
   InstructorStatus,
@@ -26,15 +34,18 @@ export class ApiRequestError extends Error {
 interface RequestOptions {
   signal?: AbortSignal;
   body?: unknown;
+  /** Lets the request finish even while the page is closing. */
+  keepalive?: boolean;
 }
 
-async function request<T>(method: 'GET' | 'POST' | 'PUT', path: string, opts: RequestOptions = {}): Promise<T> {
+async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, opts: RequestOptions = {}): Promise<T> {
   // Same-origin requests send the httpOnly session cookie automatically.
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, {
     method,
     signal: opts.signal,
+    keepalive: opts.keepalive,
     headers,
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
@@ -72,7 +83,8 @@ export const api = {
   startSession: (student: StartSessionRequest) =>
     request<SessionResponse>('POST', '/api/session/start', { body: student }),
 
-  classes: (signal?: AbortSignal) => request<ClassListResponse>('GET', '/api/classes', { signal }),
+  /** Start screen: class list and the tests that are open right now. */
+  startOptions: (signal?: AbortSignal) => request<StartOptionsResponse>('GET', '/api/start-options', { signal }),
 
   /** The student's exam (questions only; answers never leave the server). */
   exam: (signal?: AbortSignal) => request<StudentExam>('GET', '/api/exam', { signal }),
@@ -89,6 +101,10 @@ export const api = {
 
   finish: () => request<ExamResultView>('POST', '/api/attempt/finish'),
 
+  /** Tells the server the student left the test screen; the server locks the test. */
+  reportLeft: (reason: string) =>
+    request<AttemptView>('POST', '/api/attempt/left', { body: { reason }, keepalive: true }),
+
   /** Practice exams only: start over with a fresh attempt and Linux environment. */
   newAttempt: () => request<SessionResponse>('POST', '/api/session/new-attempt'),
 
@@ -103,4 +119,38 @@ export const instructorApi = {
   attempts: (signal?: AbortSignal) => request<AttemptSummary[]>('GET', '/api/instructor/attempts', { signal }),
   attempt: (id: string, signal?: AbortSignal) =>
     request<AttemptDetail>('GET', `/api/instructor/attempts/${encodeURIComponent(id)}`, { signal }),
+  deleteAttempt: (id: string) => request<void>('DELETE', `/api/instructor/attempts/${encodeURIComponent(id)}`),
+  unlock: (id: string) => request<void>('POST', `/api/instructor/attempts/${encodeURIComponent(id)}/unlock`),
+
+  // Exam editor
+  aiStatus: (signal?: AbortSignal) => request<AiStatus>('GET', '/api/instructor/ai', { signal }),
+  exams: (signal?: AbortSignal) => request<ExamSummary[]>('GET', '/api/instructor/exams', { signal }),
+  exam: (id: string, signal?: AbortSignal) => request<ExamDetail>('GET', examPath(id), { signal }),
+  createExam: (title: string) => request<ExamDetail>('POST', '/api/instructor/exams', { body: { title } }),
+  updateExam: (id: string, body: { title: string; description: string; settings: ExamSettings }) =>
+    request<ExamDetail>('PUT', examPath(id), { body }),
+  deleteExam: (id: string) => request<void>('DELETE', examPath(id)),
+  setExamEnabled: (id: string, enabled: boolean) =>
+    request<ExamDetail>('POST', `${examPath(id)}/${enabled ? 'enable' : 'disable'}`),
+  reorder: (id: string, order: string[]) => request<ExamDetail>('PUT', `${examPath(id)}/order`, { body: { order } }),
+  addQuestion: (examId: string, content: QuestionContent) =>
+    request<InstructorQuestion>('POST', `${examPath(examId)}/questions`, { body: content }),
+  updateQuestion: (examId: string, questionId: string, content: QuestionContent) =>
+    request<InstructorQuestion>('PUT', questionPath(examId, questionId), { body: content }),
+  deleteQuestion: (examId: string, questionId: string) => request<void>('DELETE', questionPath(examId, questionId)),
+  approve: (examId: string, questionId: string) =>
+    request<InstructorQuestion>('POST', `${questionPath(examId, questionId)}/approve`),
+  unapprove: (examId: string, questionId: string) =>
+    request<InstructorQuestion>('POST', `${questionPath(examId, questionId)}/unapprove`),
+  retest: (examId: string, questionId: string) => request<void>('POST', `${questionPath(examId, questionId)}/test`),
+  generate: (examId: string, body: GenerateQuestionsRequest) =>
+    request<GenerateQuestionsResponse>('POST', `${examPath(examId)}/generate`, { body }),
 };
+
+function examPath(id: string): string {
+  return `/api/instructor/exams/${encodeURIComponent(id)}`;
+}
+
+function questionPath(examId: string, questionId: string): string {
+  return `${examPath(examId)}/questions/${encodeURIComponent(questionId)}`;
+}

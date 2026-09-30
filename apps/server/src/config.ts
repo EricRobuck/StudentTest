@@ -112,6 +112,12 @@ export const config = {
   // CLASS_LIST=CS120-01,CS120-02. Unset = students type their class.
   classes: readClassList(),
 
+  // AI question writing (instructor exam editor). Needs OPENAI_API_KEY,
+  // which the OpenAI SDK reads from the environment / .env file.
+  ai: {
+    model: process.env.AI_MODEL || 'gpt-5.5',
+  },
+
   // 'practice' (default) or 'exam': which settings the sample exam runs with.
   sampleExamMode: process.env.SAMPLE_EXAM_MODE === 'exam' ? ('exam' as const) : ('practice' as const),
 

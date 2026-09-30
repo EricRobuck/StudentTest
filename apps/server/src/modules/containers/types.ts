@@ -37,6 +37,14 @@ export interface RuntimeStatus {
   message?: string;
 }
 
+export interface CreateContainerOptions {
+  /**
+   * Admin exercises: the student may use sudo. Weakens isolation (root inside
+   * the container); see docs/SECURITY.md. Off unless an exam turns it on.
+   */
+  allowSudo?: boolean;
+}
+
 /** An interactive Bash process on a PTY inside a student container. */
 export interface ShellHandle {
   write(data: Buffer): void;
@@ -53,7 +61,7 @@ export interface ShellHandle {
 
 export interface ContainerRuntime {
   status(): Promise<RuntimeStatus>;
-  createSessionContainer(sessionId: string): Promise<SessionContainer>;
+  createSessionContainer(sessionId: string, options?: CreateContainerOptions): Promise<SessionContainer>;
   isRunning(containerId: string): Promise<boolean>;
   /** Starts an interactive login shell as `student`. */
   attachShell(containerId: string, size: { cols: number; rows: number }): Promise<ShellHandle>;

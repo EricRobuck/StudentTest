@@ -30,6 +30,7 @@ export async function gradeQuestion(ctx: GradingContext, validation: ValidationS
         passed: false,
         score: 0,
         message: 'This check could not be completed. Please try submitting again.',
+        showToStudent: true,
         detail: err instanceof Error ? err.message : String(err),
       });
     }

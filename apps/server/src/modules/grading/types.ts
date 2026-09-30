@@ -12,8 +12,14 @@ export interface RuleResult {
   passed: boolean;
   /** 0..1. Pass/fail validators return 0 or 1; the field exists for future partial credit. */
   score: number;
-  /** Student-facing explanation. */
+  /** Explanation for the instructor's attempt view. Usually reveals the expected answer. */
   message: string;
+  /**
+   * true only for technical problems (terminal not connected, check could
+   * not run) whose message is safe and useful to show the student. Any other
+   * message is never sent to students, because it would give away the answer.
+   */
+  showToStudent?: boolean;
   /** Extra detail for instructors (raw observed values, errors). Never sent to students. */
   detail?: string;
 }

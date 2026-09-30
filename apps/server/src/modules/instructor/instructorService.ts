@@ -6,7 +6,7 @@ import type {
   InstructorRuleResult,
 } from '@linuxlab/shared';
 import type { AttemptService } from '../attempts/attemptService.js';
-import type { AttemptRecord, CommandLogRecord, Repositories, SubmissionRecord } from '../db/index.js';
+import type { AttemptRecord, CommandLogRecord, IntegrityEventRecord, Repositories, SubmissionRecord } from '../db/index.js';
 import { orderedQuestions } from '../exams/examService.js';
 import type { ExamDefinition } from '../exams/types.js';
 
@@ -15,34 +15,36 @@ export class InstructorService {
   constructor(
     private readonly repos: Repositories,
     private readonly attempts: AttemptService,
-    private readonly examById: (id: string) => ExamDefinition | undefined,
+    private readonly examFor: (attempt: AttemptRecord) => ExamDefinition | undefined,
   ) {}
 
   async listAttempts(): Promise<AttemptSummary[]> {
     await this.attempts.expireOverdue(); // show accurate statuses
     const summaries: AttemptSummary[] = [];
     for (const attempt of await this.repos.attempts.listAll()) {
-      const exam = this.examById(attempt.examId);
+      const exam = this.examFor(attempt);
       if (!exam) continue;
-      const [subs, commands] = await Promise.all([
+      const [subs, commands, events] = await Promise.all([
         this.repos.submissions.listForAttempt(attempt.id),
         this.repos.commands.listForAttempt(attempt.id),
+        this.repos.attempts.integrityEvents(attempt.id),
       ]);
-      summaries.push(this.summary(exam, attempt, subs, commands));
+      summaries.push(this.summary(exam, attempt, subs, commands, events));
     }
     return summaries;
   }
 
   async attemptDetail(attemptId: string): Promise<AttemptDetail | undefined> {
     const attempt = await this.attempts.get(attemptId);
-    const exam = attempt && this.examById(attempt.examId);
+    const exam = attempt && this.examFor(attempt);
     if (!attempt || !exam) return undefined;
 
-    const [subs, commands, visits, snapshots] = await Promise.all([
+    const [subs, commands, visits, snapshots, events] = await Promise.all([
       this.repos.submissions.listForAttempt(attempt.id),
       this.repos.commands.listForAttempt(attempt.id),
       this.repos.attempts.visits(attempt.id),
       this.repos.snapshots.forAttempt(attempt.id),
+      this.repos.attempts.integrityEvents(attempt.id),
     ]);
     const timeSpent = timeSpentPerQuestion(visits, attempt.completedAt ?? new Date().toISOString());
     const questionIds = new Set(exam.questions.map((q) => q.id));
@@ -74,9 +76,10 @@ export class InstructorService {
 
     const latest = snapshots.at(-1);
     return {
-      summary: this.summary(exam, attempt, subs, commands),
+      summary: this.summary(exam, attempt, subs, commands, events),
       questions,
       unassignedCommands: commands.filter((c) => !c.questionId || !questionIds.has(c.questionId)).map(toCommand),
+      integrityEvents: events,
       snapshot: latest ? (latest.data as FsSnapshotView) : null,
     };
   }
@@ -86,6 +89,7 @@ export class InstructorService {
     attempt: AttemptRecord,
     subs: SubmissionRecord[],
     commands: CommandLogRecord[],
+    events: IntegrityEventRecord[],
   ): AttemptSummary {
     const score = this.attempts.score(exam, subs);
     return {
@@ -103,6 +107,9 @@ export class InstructorService {
       submissionCount: subs.length,
       commandCount: commands.length,
       flaggedCommandCount: commands.filter((c) => c.flags.length > 0).length,
+      lockedAt: attempt.lockedAt,
+      lockReason: attempt.lockReason,
+      timesLeft: events.filter((e) => e.type === 'left').length,
     };
   }
 }

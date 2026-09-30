@@ -5,10 +5,12 @@ interface ResultsViewProps {
   result: ExamResultView;
   /** Starts a fresh practice attempt; only offered when the exam allows retakes. */
   onStartOver: () => Promise<void>;
+  /** Back to the start screen to choose a different test. */
+  onTakeAnother: () => void;
 }
 
 /** Final results after the exam ends (requirements §16). */
-export function ResultsView({ result, onStartOver }: ResultsViewProps) {
+export function ResultsView({ result, onStartOver, onTakeAnother }: ResultsViewProps) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,15 +27,18 @@ export function ResultsView({ result, onStartOver }: ResultsViewProps) {
 
   return (
     <section className="results" aria-label="Exam results">
-      {result.canRetake && (
-        <div className="results-actions">
+      <div className="results-actions">
+        {result.canRetake && (
           <button type="button" onClick={() => void startOver()} disabled={starting}>
-            {starting ? 'Starting…' : 'Start a new attempt'}
+            {starting ? 'Starting…' : 'Try this test again'}
           </button>
-          <span className="muted">Practice mode: you get a fresh Linux environment and a new score.</span>
-          {error && <p className="error-text">{error}</p>}
-        </div>
-      )}
+        )}
+        <button type="button" className="secondary" onClick={onTakeAnother} disabled={starting}>
+          Take another test
+        </button>
+        {result.canRetake && <span className="muted">Practice test: a retake gives you a fresh Linux environment and a new score.</span>}
+        {error && <p className="error-text">{error}</p>}
+      </div>
       <h2>{result.examTitle}</h2>
       {result.studentName && (
         <p className="results-student">

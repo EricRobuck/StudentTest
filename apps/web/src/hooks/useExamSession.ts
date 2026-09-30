@@ -5,8 +5,8 @@ import { api, ApiRequestError } from '../api/client';
 export type ExamSessionState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  /** No session yet: show the start screen (name + class). */
-  | { kind: 'start' }
+  /** No session yet (or choosing another test): show the start screen. */
+  | { kind: 'start'; initial?: StudentInfo }
   | {
       kind: 'in_progress';
       student: StudentInfo;
@@ -77,5 +77,8 @@ export function useExamSession() {
 
   const showResult = useCallback((result: ExamResultView) => setState({ kind: 'completed', result }), []);
 
-  return { state, reload, updateAttempt, showResult };
+  /** From the results page: back to the start screen to choose another test. */
+  const chooseAnotherTest = useCallback((initial?: StudentInfo) => setState({ kind: 'start', initial }), []);
+
+  return { state, reload, updateAttempt, showResult, chooseAnotherTest };
 }

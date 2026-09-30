@@ -64,6 +64,48 @@ Students open http://127.0.0.1:5173, enter their name and class, and click
 **Start exam**. To offer a fixed list of classes instead of a text box, add
 `CLASS_LIST=CS120-01,CS120-02` (your sections) to `.env`.
 
+**Staying on the test screen.** By default, once a test starts, the student
+must stay on it. Switching tabs, minimizing the browser, switching to another
+window or app (for more than a second), or closing/refreshing the page
+**locks the test**. The terminal disconnects, and submitting and finishing are
+refused until you unlock it. The timer keeps running. Locked students
+appear at the top of **Student attempts** (it refreshes every 10 seconds)
+with an **Unlock** button. Every lock and unlock is logged with its time
+on the attempt's page. Turn this off per exam in **Exam settings** ("Lock the
+test if the student leaves the screen").
+
+## Classroom mode (students connect to your computer)
+
+Stop `npm run dev` first, make sure Docker Desktop is running, then:
+
+```bash
+npm run classroom
+```
+
+This prints the address students open, for example `http://10.3.134.195:4173`.
+Only that web page is opened to the network. The backend and Docker stay
+private on your computer.
+
+- **Firewall:** the first time, Windows asks whether Node.js may accept
+  connections. Allow it, including on *public* networks if the classroom
+  Wi-Fi shows as public. Alternatively, run once in an **administrator**
+  PowerShell:
+  `New-NetFirewallRule -DisplayName "Linux exam (4173)" -Direction Inbound -Protocol TCP -LocalPort 4173 -Action Allow -Profile Any`
+- **Test first:** open the address on your phone (on the same Wi-Fi, not
+  cellular). Guest Wi-Fi networks often block devices from reaching each
+  other. If the page won't load, ask IT for a network that allows it, or use a
+  small classroom router.
+- **Keep the PC awake and plugged in**, and don't let it sleep during a test.
+  Your address can change from day to day, so read it from the printout.
+
+## Writing exams (and letting AI draft questions)
+
+In the instructor pages, open **Exams** to create exams and write questions.
+To let AI (OpenAI) draft questions, add `OPENAI_API_KEY=...` to `.env`. Every
+question, whether written by hand or by AI, is test-run in a sandbox and needs
+your approval before students see it. Make an exam **active** to give it to
+students.
+
 ## Instructor pages
 
 Open http://127.0.0.1:5173/instructor. Access needs `INSTRUCTOR_PASSWORD`

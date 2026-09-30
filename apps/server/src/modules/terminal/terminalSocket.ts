@@ -11,6 +11,8 @@ export interface TerminalSocketDeps {
   hub: TerminalHub;
   allowedOrigins: readonly string[];
   heartbeatMs: number;
+  /** True while the attempt is locked because the student left the test screen. */
+  isLocked: (attemptId: string) => Promise<boolean>;
 }
 
 /**
@@ -35,18 +37,28 @@ export function attachTerminalSocket(server: Server, deps: TerminalSocketDeps): 
       // Hold incoming messages (e.g. the first resize) until the bridge is
       // listening; otherwise they'd be dropped during the database lookup.
       ws.pause();
+      // A paused socket can't read the client's reply to our close frame, so
+      // resume before refusing; otherwise the close hangs until it times out.
+      const refuse = (code: number, reason: string) => {
+        ws.resume();
+        ws.close(code, reason);
+      };
       void (async () => {
         const token = readCookie(req.headers.cookie, SESSION_COOKIE);
         const session = token ? await deps.sessions.findByToken(token) : undefined;
         if (!session) {
           // Upgrade first, then close with a code the client understands
           // ("create a session and try again"); a plain HTTP 401 is invisible to browsers.
-          ws.close(TERMINAL_CLOSE.NO_SESSION, 'No session');
+          refuse(TERMINAL_CLOSE.NO_SESSION, 'No session');
           return;
         }
         if (!session.containerId) {
           // Exam finished (or environment ended and not yet recreated via POST /api/session).
-          ws.close(TERMINAL_CLOSE.NO_SESSION, 'No environment');
+          refuse(TERMINAL_CLOSE.NO_SESSION, 'No environment');
+          return;
+        }
+        if (await deps.isLocked(session.attemptId)) {
+          refuse(TERMINAL_CLOSE.LOCKED, 'Test locked');
           return;
         }
         alive.set(ws, true);
@@ -55,7 +67,7 @@ export function attachTerminalSocket(server: Server, deps: TerminalSocketDeps): 
         ws.resume();
       })().catch((err: unknown) => {
         console.warn('[terminal] upgrade failed:', err);
-        ws.close(1011, 'Server error');
+        refuse(1011, 'Server error');
       });
     });
   });

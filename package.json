@@ -12,6 +12,7 @@
     "dev:server": "npm run dev -w @linuxlab/server",
     "dev:web": "npm run dev -w @linuxlab/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "classroom": "node scripts/classroom.mjs",
     "build": "npm run build --workspaces --if-present",
     "image:build": "docker build -t linuxlab/student-ubuntu:24.04 docker/student-ubuntu",
     "smoke:containers": "npm run smoke:containers -w @linuxlab/server --",
@@ -21,7 +22,11 @@
     "smoke:commands": "npm run smoke:commands -w @linuxlab/server --",
     "smoke:instructor": "npm run smoke:instructor -w @linuxlab/server --",
     "smoke:security": "npm run smoke:security -w @linuxlab/server --",
+    "smoke:lock": "npm run smoke:lock -w @linuxlab/server --",
+    "smoke:tries": "npm run smoke:tries -w @linuxlab/server --",
+    "smoke:authoring": "npm run smoke:authoring -w @linuxlab/server --",
     "commands:show": "npm run commands:show -w @linuxlab/server --",
+    "ai:try": "npm run ai:try -w @linuxlab/server --",
     "containers:cleanup": "npm run containers:cleanup -w @linuxlab/server"
   },
   "devDependencies": {

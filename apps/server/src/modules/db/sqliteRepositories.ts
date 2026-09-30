@@ -1,9 +1,19 @@
-import type { AttemptEndReason, AttemptStatus } from '@linuxlab/shared';
+import type {
+  AttemptEndReason,
+  AttemptStatus,
+  ExamSettings,
+  QuestionContent,
+  QuestionSource,
+  QuestionStatus,
+  QuestionVerification,
+} from '@linuxlab/shared';
 import { inTransaction, type Database } from './database.js';
 import type {
   AttemptQuestionRecord,
   AttemptRecord,
   CommandLogRecord,
+  ExamQuestionRecord,
+  ExamRecord,
   Repositories,
   SessionRecord,
   SubmissionRecord,
@@ -27,6 +37,35 @@ function toAttempt(r: Row): AttemptRecord {
     deadlineAt: strOrNull(r.deadline_at),
     completedAt: strOrNull(r.completed_at),
     currentQuestionId: strOrNull(r.current_question_id),
+    examSnapshot: r.exam_snapshot ? (JSON.parse(str(r.exam_snapshot)) as unknown) : null,
+    lockedAt: strOrNull(r.locked_at),
+    lockReason: strOrNull(r.lock_reason),
+  };
+}
+
+function toExam(r: Row): ExamRecord {
+  return {
+    id: str(r.id),
+    title: str(r.title),
+    description: strOrNull(r.description),
+    settings: JSON.parse(str(r.settings)) as ExamSettings,
+    enabled: Number(r.enabled) === 1,
+    createdAt: str(r.created_at),
+    updatedAt: str(r.updated_at),
+  };
+}
+
+function toExamQuestion(r: Row): ExamQuestionRecord {
+  return {
+    id: str(r.id),
+    examId: str(r.exam_id),
+    position: Number(r.position),
+    status: str(r.status) as QuestionStatus,
+    source: str(r.source) as QuestionSource,
+    content: JSON.parse(str(r.content)) as QuestionContent,
+    verification: JSON.parse(str(r.verification)) as QuestionVerification,
+    createdAt: str(r.created_at),
+    updatedAt: str(r.updated_at),
   };
 }
 
@@ -64,8 +103,8 @@ export function createSqliteRepositories(db: Database): Repositories {
         inTransaction(db, () => {
           db.prepare(
             `INSERT INTO exam_attempts (id, exam_id, student_id, student_name, class_name, status, end_reason,
-               started_at, deadline_at, completed_at, current_question_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               started_at, deadline_at, completed_at, current_question_id, exam_snapshot)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
             a.id,
             a.examId,
@@ -78,6 +117,7 @@ export function createSqliteRepositories(db: Database): Repositories {
             a.deadlineAt,
             a.completedAt,
             a.currentQuestionId,
+            a.examSnapshot === null ? null : JSON.stringify(a.examSnapshot),
           );
           const insertQuestion = db.prepare(
             `INSERT INTO attempt_questions (attempt_id, question_id, position, max_points, variables)
@@ -104,6 +144,41 @@ export function createSqliteRepositories(db: Database): Repositories {
               variables: JSON.parse(str(r.variables)) as Record<string, string>,
             }),
           );
+      },
+      async lock(id, reason, at) {
+        return inTransaction(db, () => {
+          db.prepare("INSERT INTO integrity_events (attempt_id, type, reason, at) VALUES (?, 'left', ?, ?)").run(id, reason, at);
+          const r = db
+            .prepare(
+              `UPDATE exam_attempts SET locked_at = ?, lock_reason = ?
+               WHERE id = ? AND locked_at IS NULL AND status = 'in_progress'`,
+            )
+            .run(at, reason, id);
+          return Number(r.changes) > 0;
+        });
+      },
+      async unlock(id, by, at) {
+        return inTransaction(db, () => {
+          const r = db.prepare('UPDATE exam_attempts SET locked_at = NULL, lock_reason = NULL WHERE id = ? AND locked_at IS NOT NULL').run(id);
+          if (Number(r.changes) === 0) return false;
+          db.prepare("INSERT INTO integrity_events (attempt_id, type, reason, at) VALUES (?, 'unlocked', ?, ?)").run(id, by, at);
+          return true;
+        });
+      },
+      async delete(id) {
+        return inTransaction(db, () => {
+          // Children first: foreign keys are enforced and don't cascade.
+          for (const table of ['command_log', 'fs_snapshots', 'question_visits', 'submissions', 'attempt_questions', 'integrity_events', 'sessions']) {
+            db.prepare(`DELETE FROM ${table} WHERE attempt_id = ?`).run(id);
+          }
+          return Number(db.prepare('DELETE FROM exam_attempts WHERE id = ?').run(id).changes) > 0;
+        });
+      },
+      async integrityEvents(id) {
+        return db
+          .prepare('SELECT type, reason, at FROM integrity_events WHERE attempt_id = ? ORDER BY at, id')
+          .all(id)
+          .map((r) => ({ type: str(r.type) as 'left' | 'unlocked', reason: str(r.reason), at: str(r.at) }));
       },
       async setStudent(id, studentName, className) {
         // Only fills in a missing name: an attempt's student can't be changed later.
@@ -232,6 +307,75 @@ export function createSqliteRepositories(db: Database): Repositories {
           .prepare('SELECT * FROM submissions WHERE attempt_id = ? ORDER BY submitted_at, attempt_number')
           .all(attemptId)
           .map(toSubmission);
+      },
+    },
+
+    exams: {
+      async list() {
+        return db.prepare('SELECT * FROM exams ORDER BY created_at').all().map(toExam);
+      },
+      async get(id) {
+        const row = db.prepare('SELECT * FROM exams WHERE id = ?').get(id);
+        return row ? toExam(row) : undefined;
+      },
+      async save(e) {
+        db.prepare(
+          `INSERT INTO exams (id, title, description, settings, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET title = excluded.title, description = excluded.description,
+             settings = excluded.settings, enabled = excluded.enabled, updated_at = excluded.updated_at`,
+        ).run(e.id, e.title, e.description, JSON.stringify(e.settings), e.enabled ? 1 : 0, e.createdAt, e.updatedAt);
+      },
+      async delete(id) {
+        db.prepare('DELETE FROM exams WHERE id = ?').run(id); // questions cascade
+      },
+      async questions(examId) {
+        return db
+          .prepare('SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY position, created_at')
+          .all(examId)
+          .map(toExamQuestion);
+      },
+      async allQuestions() {
+        return db.prepare('SELECT * FROM exam_questions ORDER BY exam_id, position').all().map(toExamQuestion);
+      },
+      async getQuestion(id) {
+        const row = db.prepare('SELECT * FROM exam_questions WHERE id = ?').get(id);
+        return row ? toExamQuestion(row) : undefined;
+      },
+      async saveQuestion(q) {
+        db.prepare(
+          `INSERT INTO exam_questions (id, exam_id, position, status, source, content, verification, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET position = excluded.position, status = excluded.status,
+             content = excluded.content, verification = excluded.verification, updated_at = excluded.updated_at`,
+        ).run(
+          q.id,
+          q.examId,
+          q.position,
+          q.status,
+          q.source,
+          JSON.stringify(q.content),
+          JSON.stringify(q.verification),
+          q.createdAt,
+          q.updatedAt,
+        );
+      },
+      async deleteQuestion(id) {
+        db.prepare('DELETE FROM exam_questions WHERE id = ?').run(id);
+      },
+      async reorder(examId, questionIds) {
+        inTransaction(db, () => {
+          const update = db.prepare('UPDATE exam_questions SET position = ? WHERE id = ? AND exam_id = ?');
+          questionIds.forEach((id, i) => update.run(i + 1, id, examId));
+        });
+      },
+      async getSetting(key) {
+        const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+        return row ? str(row.value) : undefined;
+      },
+      async setSetting(key, value) {
+        db.prepare(
+          'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+        ).run(key, value);
       },
     },
 

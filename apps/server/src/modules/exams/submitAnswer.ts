@@ -1,6 +1,7 @@
-import type { SubmitResult } from '@linuxlab/shared';
+import { tryCredit, type SubmitResult } from '@linuxlab/shared';
 import type { AttemptService, SubmitBlock } from '../attempts/attemptService.js';
 import type { ContainerRuntime } from '../containers/index.js';
+import type { AttemptRecord } from '../db/index.js';
 import { gradeQuestion } from '../grading/index.js';
 import type { ExamSession } from '../sessions/sessionManager.js';
 import type { ExamDefinition } from './types.js';
@@ -15,7 +16,7 @@ export type SubmitOutcome =
 export interface SubmitDeps {
   runtime: ContainerRuntime;
   attempts: AttemptService;
-  examById: (id: string) => ExamDefinition | undefined;
+  examFor: (attempt: AttemptRecord) => ExamDefinition | undefined;
 }
 
 // One grading run at a time per session: repeated clicks can't pile up
@@ -33,7 +34,7 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
   try {
     // get() also completes the attempt if its time is up.
     const attempt = await deps.attempts.get(session.attemptId);
-    const exam = attempt && deps.examById(attempt.examId);
+    const exam = attempt && deps.examFor(attempt);
     if (!attempt || !exam) return { kind: 'blocked', reason: 'completed' };
     const question = exam.questions.find((q) => q.id === questionId);
     if (!question) return { kind: 'unknown-question' };
@@ -47,7 +48,10 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
     }
 
     const grade = await gradeQuestion({ runtime: deps.runtime, containerId: session.containerId }, question.validation);
-    const pointsAwarded = Math.round(question.points * grade.score * 100) / 100;
+    // Three-tries rule: a later correct answer earns less (100% / 90% / 60%).
+    const previousTries = before.filter((s) => s.questionId === question.id).length;
+    const credit = tryCredit(exam.settings, previousTries);
+    const pointsAwarded = Math.round(question.points * grade.score * credit * 100) / 100;
     const attemptNumber = await deps.attempts.recordSubmission(attempt, question.id, {
       passed: grade.passed,
       score: grade.score,
@@ -72,7 +76,10 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
             pointsAwarded,
             maxPoints: question.points,
             // Only student-facing fields leave the server; `detail` stays here.
-            rules: grade.rules.map((r) => ({ passed: r.passed, message: r.message })),
+            // Students only learn right/wrong. The reasons (e.g. "your terminal is
+            // in /home/student, not /home") give the answer away, so only
+            // technical problems they can act on are passed through.
+            rules: grade.rules.filter((r) => r.showToStudent).map((r) => ({ passed: r.passed, message: r.message })),
           }
         : null,
       progress: deps.attempts.progress(exam, attempt, after, question.id),

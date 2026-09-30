@@ -48,7 +48,10 @@ export interface StudentQuestion {
 /** Outcome of one validation rule, as shown to the student. */
 export interface RuleResultView {
   passed: boolean;
-  /** Short explanation, e.g. "Your terminal is in /home/student, not /etc". */
+  /**
+   * Only technical problems the student can act on ("Your terminal is not
+   * connected…"). Reasons that reveal the expected answer are never sent.
+   */
   message: string;
 }
 
@@ -76,6 +79,8 @@ export interface QuestionProgress {
   locked: boolean;
   /** Best result so far; null if never submitted or results are hidden until the end. */
   best: { passed: boolean; pointsAwarded: number } | null;
+  /** Points a correct answer earns on the next submission; null when no more submissions are allowed. */
+  nextTryPoints: number | null;
 }
 
 /** Response body of POST /api/exam/questions/:questionId/submit. */
@@ -101,6 +106,8 @@ export interface AttemptView {
   deadlineAt: string | null;
   serverTime: string;
   currentQuestionId: string | null;
+  /** Set when the student left the test screen; only the instructor can unlock. */
+  locked: { at: string; reason: string } | null;
   score: ScoreView | null;
   questions: QuestionProgress[];
 }
@@ -136,6 +143,10 @@ export interface StudentExamRules {
   showFeedback: boolean;
   showScoreDuringExam: boolean;
   lockAfterSubmit: boolean;
+  /** Leaving the test screen locks the test until the instructor unlocks it. */
+  lockOnLeave: boolean;
+  /** Three tries per question: 100% / 90% / 60% of the points, then 0. */
+  threeTries: boolean;
 }
 
 /** Response body of GET /api/exam. */

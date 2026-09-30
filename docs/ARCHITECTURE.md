@@ -348,3 +348,41 @@ is typed once in `packages/shared`.
   - Stored on `exam_attempts` (migration 4: `student_name`, `class_name`);
     shown in the exam header, results, and instructor pages (class filter,
     name search). Self-reported, not authentication — see SECURITY.md R1.
+- **Exam editor and AI-written questions.**
+  - Exams and questions live in the database (migration 5: `exams`,
+    `exam_questions` with JSON `QuestionContent` + `QuestionVerification`,
+    `app_settings.active_exam_id`). `ExamCatalog` caches them in memory; the
+    sample exam is seeded on a fresh database.
+  - Students only get **approved** questions of the **active** exam. Each
+    attempt stores `exam_snapshot` (the exam as it started) and all grading
+    uses it (`examForAttempt`), so edits never affect exams in progress.
+  - Question content (shared `validateQuestionContent`): text, points, checks,
+    optional setup (`create_directory`/`create_file`, only under
+    `SETUP_PATH_PREFIXES`, owned by the student), and an instructor-only
+    **model answer** (`solution`). `setupRunner` applies setup to student
+    containers at start (and after an environment reset) with constant
+    scripts and positional arguments.
+  - **Sandbox test** (`questionVerifier`): throwaway container → setup →
+    grade must fail → type the model answer into a real terminal → grade must
+    pass. Runs one at a time in the background after every add/edit. Only
+    questions that passed can be approved; editing sends a question back to
+    draft.
+  - **AI drafts** (`questionGenerator`): OpenAI Node SDK, Responses API,
+    `gpt-5.5` by default (`AI_MODEL`), strict JSON-schema output
+    (`text.format`, `strict: true`), medium reasoning effort; refusals and
+    truncated answers are reported, not parsed. The key is `OPENAI_API_KEY`.
+    Output is untrusted: schema → `validateQuestionContent` → sandbox test →
+    instructor approval. Only the topic, notes and existing question titles
+    are sent to OpenAI — never student data. Limited to 20 generations per
+    hour, one at a time. The provider is isolated in this one file.
+  - **Admin exercises** (`ExamSettings.allowSudo`, per exam, default off):
+    the image has passwordless `sudo` (the only setuid binary left);
+    `createSessionContainer(id, { allowSudo })` drops `no-new-privileges` and
+    adds SETUID/SETGID/FSETID/KILL/AUDIT_WRITE for those exams only, so in
+    every other container sudo refuses to run. The sandbox test and the AI
+    prompt use the exam's mode; toggling it re-tests all questions, and an
+    approved question that fails a re-test goes back to draft. Trade-offs:
+    SECURITY.md R12.
+  - API: `/api/instructor/exams[...]`, `/api/instructor/ai`; UI: Exams tab
+    (`ExamsPage`, `ExamEditorPage`, `QuestionForm`). Verified by
+    `npm run smoke:authoring`.

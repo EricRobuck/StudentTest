@@ -3,8 +3,10 @@
 #
 # Security notes:
 # - The interactive shell runs as the unprivileged user `student` (uid 1000)
-#   with no sudo and a locked password.
-# - All setuid/setgid bits are stripped, so there is no in-image path to root.
+#   with a locked password.
+# - All setuid/setgid bits are stripped except sudo's. sudo only works in
+#   exams with "Students can use sudo" turned on: every other container runs
+#   with no-new-privileges, which makes sudo refuse to run.
 # - Network, capabilities, and resource limits are applied by the backend at
 #   container creation (apps/server/src/modules/containers/dockerRuntime.ts).
 
@@ -24,6 +26,7 @@ RUN apt-get update \
       nano \
       procps \
       psmisc \
+      sudo \
       tree \
       vim-tiny \
  && rm -rf /var/lib/apt/lists/*
@@ -36,9 +39,14 @@ RUN (userdel -r ubuntu 2>/dev/null || true) \
  && mkdir -p /home/student/Documents /home/student/Downloads /home/student/Desktop \
  && chown -R student:student /home/student
 
-# Remove every setuid/setgid bit (su, passwd, mount, ...). Combined with
-# no-new-privileges at runtime, the student has no way to gain root.
-RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} + || true
+# Admin exercises: passwordless sudo for the student (students have no password).
+RUN printf 'student ALL=(ALL:ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/student \
+ && chmod 0440 /etc/sudoers.d/student \
+ && visudo -c
+
+# Remove every setuid/setgid bit (su, passwd, mount, ...) except sudo's.
+# Without the per-exam sudo setting, no-new-privileges blocks sudo too.
+RUN find / -xdev -perm /6000 -type f ! -path /usr/bin/sudo -exec chmod a-s {} + || true
 
 # Command logging hook (root-owned, read-only for the student), loaded by
 # every interactive bash via the system-wide bashrc. Ubuntu's default
@@ -49,7 +57,7 @@ RUN printf '\n# Linux Lab command logging\n. /etc/linuxlab/command-hook.sh\n' >>
  && sed -i '/^HISTCONTROL=/d' /etc/skel/.bashrc /home/student/.bashrc
 
 LABEL org.linuxlab.image="student-ubuntu" \
-      org.linuxlab.version="2"
+      org.linuxlab.version="3"
 
 USER student
 WORKDIR /home/student

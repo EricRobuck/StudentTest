@@ -10,12 +10,30 @@ export interface StudentInfo {
 }
 
 /** Body of POST /api/session/start. */
-export type StartSessionRequest = StudentInfo;
+export interface StartSessionRequest extends StudentInfo {
+  /** Which open test the student chose. */
+  examId: string;
+}
 
-/** Response body of GET /api/classes. */
-export interface ClassListResponse {
+/** A test students may choose on the start screen. */
+export interface OpenExam {
+  id: string;
+  title: string;
+  description: string | null;
+  questionCount: number;
+  totalPoints: number;
+  timeLimitMinutes: number | null;
+  mode: 'practice' | 'exam';
+  /** The test locks if the student leaves the test screen. */
+  lockOnLeave: boolean;
+}
+
+/** Response body of GET /api/start-options. */
+export interface StartOptionsResponse {
   /** The classes to choose from, or null when students type their class. */
   classes: string[] | null;
+  /** Tests currently open to students (may be empty). */
+  exams: OpenExam[];
 }
 
 export const STUDENT_LIMITS = {

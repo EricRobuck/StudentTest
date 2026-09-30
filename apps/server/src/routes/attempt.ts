@@ -6,7 +6,7 @@ import { rateLimit, type Limiters } from '../http/rateLimit.js';
 import { requireSession, sessionOf } from '../http/requireSession.js';
 import { requireAllowedOrigin } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
-import { getExamById } from '../modules/exams/examService.js';
+import { examForAttempt } from '../modules/exams/examService.js';
 import type { SessionManager } from '../modules/sessions/sessionManager.js';
 
 const QUESTION_ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -19,7 +19,7 @@ export function attemptRouter(sessions: SessionManager, attempts: AttemptService
   /** Loads the caller's attempt + exam or sends 404. */
   async function load(res: Response) {
     const attempt = await attempts.get(sessionOf(res).attemptId);
-    const exam = attempt && getExamById(attempt.examId);
+    const exam = attempt && examForAttempt(attempt);
     if (!attempt || !exam) {
       sendError(res, 404, 'NOT_FOUND', 'Exam attempt not found');
       return undefined;
@@ -57,11 +57,32 @@ export function attemptRouter(sessions: SessionManager, attempts: AttemptService
     }
   });
 
+  // POST /api/attempt/left { reason } — the student's page reports that they
+  // left the test screen. Locks the test (if the test uses "lock on leave").
+  // Also sent as a keepalive request when the page closes.
+  router.post('/attempt/left', sameOrigin, requireSession(sessions), async (req, res, next) => {
+    try {
+      const found = await load(res);
+      if (!found) return;
+      const raw: unknown = (req.body as { reason?: unknown } | undefined)?.reason;
+      const reason = typeof raw === 'string' && raw.length > 0 ? raw.slice(0, 200) : 'left the test screen';
+      await attempts.reportLeft(found.attempt, reason);
+      const fresh = await attempts.get(found.attempt.id);
+      const body: AttemptView = await attempts.view(found.exam, fresh ?? found.attempt);
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // POST /api/attempt/finish — end the exam now; returns the final result.
   router.post('/attempt/finish', sameOrigin, requireSession(sessions), writeLimit, async (_req, res, next) => {
     try {
       const found = await load(res);
       if (!found) return;
+      if (found.attempt.lockedAt) {
+        return sendError(res, 409, 'TEST_LOCKED', 'Your test is locked because you left the test screen. Please call your instructor.');
+      }
       await attempts.complete(found.attempt.id, 'finished');
       const completed = await attempts.get(found.attempt.id);
       const body: ExamResultView = await attempts.result(found.exam, completed ?? found.attempt);

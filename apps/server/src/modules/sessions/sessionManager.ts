@@ -1,8 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttemptStatus, StudentInfo } from '@linuxlab/shared';
 import type { AttemptService } from '../attempts/attemptService.js';
-import type { ContainerRuntime } from '../containers/index.js';
-import type { Repositories, SessionRecord } from '../db/index.js';
+import { ContainerError, type ContainerRuntime } from '../containers/index.js';
+import type { AttemptRecord, Repositories, SessionRecord } from '../db/index.js';
+import { applySetup, examSetupSteps } from '../exams/setupRunner.js';
 import type { ExamDefinition } from '../exams/types.js';
 
 // A session is one browser's link to one exam attempt and, while the exam is
@@ -19,7 +20,14 @@ export interface ExamSession {
   containerName: string | null;
 }
 
-export type EnvironmentEndReason = 'idle' | 'environment-lost' | 'exam-over';
+export type EnvironmentEndReason = 'idle' | 'environment-lost' | 'exam-over' | 'attempt-deleted';
+
+/** The chosen exam is not open (disabled, deleted, or no approved questions). */
+export class ExamNotOpenError extends Error {
+  constructor() {
+    super('That test is not open right now. Please choose another test or ask your instructor.');
+  }
+}
 
 export interface SessionResult {
   session: ExamSession;
@@ -42,7 +50,8 @@ export class SessionManager {
     private readonly runtime: ContainerRuntime,
     private readonly repos: Repositories,
     private readonly attempts: AttemptService,
-    private readonly activeExam: () => ExamDefinition,
+    private readonly openExam: (examId: string) => ExamDefinition | undefined,
+    private readonly examFor: (attempt: AttemptRecord) => ExamDefinition | undefined,
   ) {
     // When an exam ends (finish or time up), its Linux environments go away.
     attempts.onCompleted((attemptId) => void this.endEnvironmentsForAttempt(attemptId));
@@ -75,7 +84,7 @@ export class SessionManager {
       return { ...base, session: toSession(existing), attemptStatus: 'in_progress', environmentReset: false };
     }
     if (existing.containerId) await this.endEnvironment(existing.id, 'environment-lost');
-    const container = await this.runtime.createSessionContainer(existing.id);
+    const container = await this.createPreparedContainer(existing.id, this.examFor(attempt));
     await this.repos.sessions.setContainer(existing.id, container.containerId, container.name);
     await this.touch(existing.id, true);
     console.log(`[sessions] new environment for session ${existing.id} → ${container.name}`);
@@ -100,12 +109,21 @@ export class SessionManager {
     return { ...current, student };
   }
 
-  /** Starts a new attempt, session (new cookie token) and container for a student. */
-  async start(student: StudentInfo): Promise<SessionResult> {
-    const attempt = await this.attempts.start(this.activeExam(), student);
+  /** Starts a new attempt on an open exam, with a new session (cookie token) and container. */
+  async start(student: StudentInfo, examId: string): Promise<SessionResult> {
+    const exam = this.openExam(examId);
+    if (!exam) throw new ExamNotOpenError();
     const newToken = randomBytes(32).toString('base64url');
     const id = randomUUID();
-    const container = await this.runtime.createSessionContainer(id);
+    // Prepare the environment first, so a failure leaves no half-started attempt.
+    const container = await this.createPreparedContainer(id, exam);
+    let attempt;
+    try {
+      attempt = await this.attempts.start(exam, student);
+    } catch (err) {
+      await this.runtime.destroy(container.containerId).catch(() => undefined);
+      throw err;
+    }
     const now = new Date().toISOString();
     const record: SessionRecord = {
       id,
@@ -128,12 +146,29 @@ export class SessionManager {
     };
   }
 
+  /** A new container with the exam's setup applied (files to find, etc.). */
+  private async createPreparedContainer(sessionId: string, exam: ExamDefinition | undefined) {
+    const container = await this.runtime.createSessionContainer(sessionId, { allowSudo: exam?.settings.allowSudo === true });
+    try {
+      if (exam) await applySetup(this.runtime, container.containerId, examSetupSteps(exam.questions));
+    } catch (err) {
+      await this.runtime.destroy(container.containerId).catch(() => undefined);
+      throw new ContainerError('DOCKER_ERROR', `Could not prepare the exam environment: ${String(err)}`, { cause: err });
+    }
+    return container;
+  }
+
   /** Records activity. Throttled so keystrokes don't hammer the database. */
   async touch(sessionId: string, force = false): Promise<void> {
     const now = Date.now();
     if (!force && now - (this.lastTouchWrite.get(sessionId) ?? 0) < TOUCH_INTERVAL_MS) return;
     this.lastTouchWrite.set(sessionId, now);
     await this.repos.sessions.touch(sessionId, new Date(now).toISOString());
+  }
+
+  /** Sessions (browser tabs) belonging to an attempt. */
+  async sessionIdsOfAttempt(attemptId: string): Promise<string[]> {
+    return (await this.repos.sessions.findByAttempt(attemptId)).map((s) => s.id);
   }
 
   /** Container ids that belong to a live session (everything else is an orphan). */

@@ -68,6 +68,35 @@ async function containerAttacks(): Promise<void> {
   }
 }
 
+async function adminModeChecks(): Promise<void> {
+  console.log('\n--- Admin exercises ("Students can use sudo") ---');
+  const c = await runtime.createSessionContainer(`sec-sudo-${randomUUID().slice(0, 8)}`, { allowSudo: true });
+  const asStudent = (script: string) =>
+    runtime.exec(c.containerId, ['/bin/bash', '-c', script], { user: 'student', timeoutMs: 15_000 });
+  try {
+    const who = await asStudent('sudo -n whoami');
+    report(who.stdout.trim() === 'root', 'sudo works for the student (whoami → root)', `${who.stdout} ${who.stderr}`);
+    const shadow = await asStudent('sudo -n head -1 /etc/shadow');
+    report(shadow.stdout.startsWith('root:'), 'sudo can read /etc/shadow', `${shadow.stdout} ${shadow.stderr}`);
+    const user = await asStudent('sudo -n useradd -m bob && id -u bob && sudo -n test -d /home/bob && echo HOME_OK');
+    report(/HOME_OK/.test(user.stdout), 'sudo can create a user with a home folder', `${user.stdout} ${user.stderr}`);
+    const perm = await asStudent('touch ~/f && sudo -n chown root:root ~/f && stat -c %U ~/f');
+    report(perm.stdout.trim() === 'root', 'sudo chown works');
+
+    const stillBlocked = async (name: string, script: string) => {
+      const r = await asStudent(script);
+      report(r.exitCode !== 0, `Even with sudo: ${name}`, `exit ${r.exitCode}: ${r.stdout} ${r.stderr}`.slice(0, 300));
+    };
+    await stillBlocked('no network', 'sudo -n timeout 3 bash -c "echo > /dev/tcp/1.1.1.1/80"');
+    await stillBlocked('cannot mount filesystems', 'sudo -n mount -t tmpfs none /mnt');
+    await stillBlocked('cannot create namespaces', 'sudo -n unshare -m true');
+    await stillBlocked('cannot change kernel settings', 'sudo -n sh -c "echo 1 > /proc/sys/vm/drop_caches"');
+    await stillBlocked('no raw disk devices', 'sudo -n ls /dev/sda /dev/vda /dev/nvme0n1');
+  } finally {
+    await runtime.destroy(c.containerId);
+  }
+}
+
 async function serverAttacks(): Promise<void> {
   if (!base || !dbPath) return;
   console.log('\n--- Attacking the server ---');
@@ -141,6 +170,7 @@ async function serverAttacks(): Promise<void> {
 
 async function main(): Promise<void> {
   await containerAttacks();
+  await adminModeChecks();
   await serverAttacks();
   finish();
 }

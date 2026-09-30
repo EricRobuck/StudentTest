@@ -11,6 +11,7 @@ export const practiceSettings: ExamSettings = {
   showFeedback: true,
   showScoreDuringExam: true,
   lockAfterSubmit: false,
+  allowSudo: false,
 };
 
 /** Strict settings for trying exam mode: SAMPLE_EXAM_MODE=exam. */
@@ -22,6 +23,7 @@ export const examModeSettings: ExamSettings = {
   showFeedback: false,
   showScoreDuringExam: false,
   lockAfterSubmit: false,
+  allowSudo: false,
 };
 
 export const sampleExam: ExamDefinition = {
@@ -44,6 +46,7 @@ export const sampleExam: ExamDefinition = {
       validation: { mode: 'all', rules: [{ type: 'current_directory', path: '/etc' }] },
       hint: 'The `cd` command changes your current directory. `pwd` shows where you are.',
       explanation: '`cd /etc` moves the shell into /etc; `pwd` confirms it.',
+      solution: ['cd /etc'],
     },
     {
       id: 'q2-create-directory',
@@ -58,6 +61,7 @@ export const sampleExam: ExamDefinition = {
       validation: { mode: 'all', rules: [{ type: 'directory_exists', path: '/tmp/cybersecurity' }] },
       hint: 'Use `mkdir`. You can give it a full path, or `cd` somewhere first.',
       explanation: '`mkdir /tmp/cybersecurity` (or `cd /tmp` then `mkdir cybersecurity`).',
+      solution: ['mkdir /tmp/cybersecurity'],
     },
     {
       id: 'q3-create-file',
@@ -72,6 +76,7 @@ export const sampleExam: ExamDefinition = {
       validation: { mode: 'all', rules: [{ type: 'file_exists', path: '/tmp/cybersecurity/test.txt' }] },
       hint: '`touch` creates an empty file.',
       explanation: '`touch /tmp/cybersecurity/test.txt`',
+      solution: ['mkdir -p /tmp/cybersecurity', 'touch /tmp/cybersecurity/test.txt'],
     },
     {
       id: 'q4-file-contents',
@@ -89,6 +94,7 @@ export const sampleExam: ExamDefinition = {
       },
       hint: '`echo` prints text, and `>` sends output into a file instead of the screen.',
       explanation: '`echo "Linux is awesome" > /tmp/cybersecurity/test.txt` (or edit it with nano).',
+      solution: ['mkdir -p /tmp/cybersecurity', 'echo "Linux is awesome" > /tmp/cybersecurity/test.txt'],
     },
     {
       id: 'q5-permissions',
@@ -107,6 +113,7 @@ export const sampleExam: ExamDefinition = {
       },
       hint: '`chmod` changes permissions. In octal, read = 4, write = 2, execute = 1.',
       explanation: '`chmod 640 /tmp/cybersecurity/test.txt` — 6 = rw- (owner), 4 = r-- (group), 0 = --- (others).',
+      solution: ['mkdir -p /tmp/cybersecurity', 'touch /tmp/cybersecurity/test.txt', 'chmod 640 /tmp/cybersecurity/test.txt'],
     },
   ],
 };

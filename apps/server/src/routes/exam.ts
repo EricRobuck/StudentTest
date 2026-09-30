@@ -7,7 +7,7 @@ import { requireSession, sessionOf } from '../http/requireSession.js';
 import { requireAllowedOrigin } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
 import type { ContainerRuntime } from '../modules/containers/index.js';
-import { getExamById, toStudentExam } from '../modules/exams/examService.js';
+import { examForAttempt, toStudentExam } from '../modules/exams/examService.js';
 import { submitAnswer } from '../modules/exams/submitAnswer.js';
 import type { SessionManager } from '../modules/sessions/sessionManager.js';
 
@@ -17,6 +17,7 @@ const BLOCK_MESSAGES = {
   completed: 'This exam has ended; no more answers can be submitted.',
   locked: 'This question has already been submitted and is locked.',
   'no-attempts-left': 'You have used all attempts for this question.',
+  'test-locked': 'Your test is locked because you left the test screen. Please call your instructor.',
 } as const;
 
 export interface ExamRouteDeps {
@@ -35,7 +36,7 @@ export function examRouter({ sessions, attempts, runtime, limiters }: ExamRouteD
   router.get('/exam', requireSession(sessions), async (_req, res, next) => {
     try {
       const attempt = await attempts.get(sessionOf(res).attemptId);
-      const exam = attempt && getExamById(attempt.examId);
+      const exam = attempt && examForAttempt(attempt);
       if (!exam) return sendError(res, 404, 'NOT_FOUND', 'Exam not found');
       const body: StudentExam = toStudentExam(exam);
       res.json(body);
@@ -49,7 +50,7 @@ export function examRouter({ sessions, attempts, runtime, limiters }: ExamRouteD
     const questionId = String(req.params.questionId);
     if (!QUESTION_ID.test(questionId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid question id');
     try {
-      const outcome = await submitAnswer({ runtime, attempts, examById: getExamById }, sessionOf(res), questionId);
+      const outcome = await submitAnswer({ runtime, attempts, examFor: examForAttempt }, sessionOf(res), questionId);
       switch (outcome.kind) {
         case 'graded':
           res.json(outcome.result);

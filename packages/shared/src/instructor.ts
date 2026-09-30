@@ -27,6 +27,18 @@ export interface AttemptSummary {
   submissionCount: number;
   commandCount: number;
   flaggedCommandCount: number;
+  /** Set while the test is locked because the student left the screen. */
+  lockedAt: string | null;
+  lockReason: string | null;
+  /** How many times the student left the test screen. */
+  timesLeft: number;
+}
+
+/** A time the student left the test screen, or an unlock. */
+export interface IntegrityEvent {
+  type: 'left' | 'unlocked';
+  reason: string;
+  at: string;
 }
 
 export interface InstructorRuleResult {
@@ -100,5 +112,7 @@ export interface AttemptDetail {
   questions: InstructorQuestionDetail[];
   /** Commands run before any question was recorded as open. */
   unassignedCommands: InstructorCommand[];
+  /** Every time the student left the test screen, and every unlock. */
+  integrityEvents: IntegrityEvent[];
   snapshot: FsSnapshotView | null;
 }

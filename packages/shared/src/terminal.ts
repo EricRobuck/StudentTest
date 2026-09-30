@@ -33,4 +33,6 @@ export const TERMINAL_CLOSE = {
   REPLACED: 4002,
   /** The session was ended by the server (idle timeout, exam over). */
   ENDED: 4003,
+  /** The student left the test screen; the instructor must unlock the test. */
+  LOCKED: 4004,
 } as const;

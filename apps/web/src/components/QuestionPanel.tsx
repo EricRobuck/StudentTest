@@ -31,11 +31,16 @@ export function QuestionPanel({
   const isFirst = question.number === 1;
   const isLast = question.number === total;
   const attempts = progress?.attempts ?? 0;
-  const locked = progress?.locked ?? false;
+  // A correct answer (when results are shown) closes the question: trying again can't earn more.
+  const passed = progress?.best?.passed === true || lastSubmit?.feedback?.passed === true;
+  const locked = (progress?.locked ?? false) || passed;
+  const missed = !passed && progress?.attemptsRemaining === 0;
 
   let submitLabel = attempts > 0 ? 'Check again' : 'Submit answer';
   if (submitting) submitLabel = 'Checking…';
-  else if (locked) submitLabel = progress?.attemptsRemaining === 0 ? 'No attempts left' : 'Submitted';
+  else if (passed) submitLabel = '✓ Correct';
+  else if (missed) submitLabel = 'Missed';
+  else if (locked) submitLabel = 'Submitted';
 
   return (
     <div className="question">
@@ -99,9 +104,20 @@ export function QuestionPanel({
           Next →
         </button>
       </div>
-      {progress?.attemptsRemaining !== null && progress?.attemptsRemaining !== undefined && (
+      {missed && (progress?.best || lastSubmit?.feedback) && (
+        <p className="result result-fail" role="status">
+          <strong>✗ Missed</strong>: no tries left on this question.
+        </p>
+      )}
+      {!passed && !missed && progress?.attemptsRemaining !== null && progress?.attemptsRemaining !== undefined && (
         <p className="attempts-left muted">
-          Attempts remaining: {progress.attemptsRemaining}
+          {progress.attemptsRemaining} {progress.attemptsRemaining === 1 ? 'try' : 'tries'} left
+          {progress.nextTryPoints !== null && (
+            <>
+              {' '}
+              · a correct answer now earns <strong>{progress.nextTryPoints}</strong> of {question.points} points
+            </>
+          )}
         </p>
       )}
     </div>
@@ -114,11 +130,14 @@ function FeedbackBox({ feedback }: { feedback: SubmitFeedback }) {
       <strong>
         {feedback.passed ? '✓ Correct' : '✗ Not yet'} — {feedback.pointsAwarded}/{feedback.maxPoints} points
       </strong>
-      <ul>
-        {feedback.rules.map((rule, i) => (
-          <li key={i}>{rule.message}</li>
-        ))}
-      </ul>
+      {/* Only technical problems (e.g. terminal not connected) are listed; reasons that would give away the answer are never sent. */}
+      {feedback.rules.length > 0 && (
+        <ul>
+          {feedback.rules.map((rule, i) => (
+            <li key={i}>{rule.message}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { AttemptView, ExamResultView, StudentExam, SubmitResult } from '@linuxlab/shared';
 import { api } from './api/client';
 import { BackendStatus } from './components/BackendStatus';
 import { ExamProgress } from './components/ExamProgress';
 import { ExamTimer } from './components/ExamTimer';
+import { LockedScreen } from './components/LockedScreen';
 import { QuestionPanel } from './components/QuestionPanel';
 import { ResultsView } from './components/ResultsView';
 import { StartScreen } from './components/StartScreen';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useExamSession } from './hooks/useExamSession';
+import { useLeaveDetection, withLeaveDetectionPaused } from './hooks/useLeaveDetection';
 import { TerminalView } from './terminal/TerminalView';
 import { createWebSocketTransport } from './terminal/webSocketTransport';
 
@@ -16,7 +18,33 @@ import { createWebSocketTransport } from './terminal/webSocketTransport';
 // All exam state (timer, progress, score) comes from the server.
 export function App() {
   const health = useBackendHealth();
-  const { state, reload, updateAttempt, showResult } = useExamSession();
+  const { state, reload, updateAttempt, showResult, chooseAnotherTest } = useExamSession();
+
+  // Leaving the test screen locks the test (when the test uses that setting).
+  const inProgress = state.kind === 'in_progress';
+  const locked = inProgress && state.attempt.locked !== null;
+  const markLocked = useCallback(
+    () =>
+      updateAttempt((a) =>
+        a.locked ? a : { ...a, locked: { at: new Date().toISOString(), reason: 'left the test screen' } },
+      ),
+    [updateAttempt],
+  );
+  useLeaveDetection(inProgress && state.exam.rules.lockOnLeave && !locked, (reason, closing) => {
+    if (!closing) markLocked(); // cover the screen right away; the server confirms below
+    api
+      .reportLeft(reason)
+      .then((attempt) => updateAttempt(() => attempt))
+      .catch(() => undefined);
+  });
+  const onLockChanged = useCallback(
+    (attempt: AttemptView) => {
+      if (attempt.status !== 'in_progress') reload();
+      else updateAttempt(() => attempt);
+    },
+    [reload, updateAttempt],
+  );
+  const createTransport = useCallback(() => createWebSocketTransport({ onLocked: markLocked }), [markLocked]);
 
   return (
     <div className="exam-layout">
@@ -47,7 +75,11 @@ export function App() {
 
       {state.kind === 'start' ? (
         <main className="exam-body exam-body-single">
-          <StartScreen onStarted={reload} />
+          <StartScreen onStarted={reload} initial={state.initial} />
+        </main>
+      ) : state.kind === 'in_progress' && state.attempt.locked ? (
+        <main className="exam-body exam-body-single">
+          <LockedScreen studentName={state.student.name} onChanged={onLockChanged} />
         </main>
       ) : state.kind === 'completed' ? (
         <main className="exam-body exam-body-single">
@@ -57,6 +89,13 @@ export function App() {
               await api.newAttempt();
               reload();
             }}
+            onTakeAnother={() =>
+              chooseAnotherTest(
+                state.result.studentName
+                  ? { name: state.result.studentName, className: state.result.className ?? '' }
+                  : undefined,
+              )
+            }
           />
         </main>
       ) : (
@@ -91,7 +130,7 @@ export function App() {
           </section>
 
           <section className="terminal-panel" aria-label="Linux terminal">
-            {state.kind === 'in_progress' && <TerminalView createTransport={createWebSocketTransport} />}
+            {state.kind === 'in_progress' && <TerminalView createTransport={createTransport} />}
           </section>
         </main>
       )}
@@ -145,7 +184,7 @@ function QuestionArea({ exam, attempt, updateAttempt, onFinished, onExamOver }: 
       }));
     } catch (err) {
       const code = (err as { code?: string }).code;
-      if (code === 'COMPLETED') onExamOver(); // time ran out: go to results
+      if (code === 'COMPLETED' || code === 'TEST_LOCKED') onExamOver(); // time ran out / locked: reload
       setSubmitError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
@@ -155,7 +194,10 @@ function QuestionArea({ exam, attempt, updateAttempt, onFinished, onExamOver }: 
   const finish = async () => {
     const unanswered = attempt.questions.filter((p) => p.attempts === 0).length;
     const warning = unanswered > 0 ? `\n\n${unanswered} question(s) have not been submitted.` : '';
-    if (!window.confirm(`Finish the exam now? You won't be able to change your answers.${warning}`)) return;
+    const confirmed = withLeaveDetectionPaused(() =>
+      window.confirm(`Finish the exam now? You won't be able to change your answers.${warning}`),
+    );
+    if (!confirmed) return;
     setFinishing(true);
     try {
       onFinished(await api.finish());

@@ -62,6 +62,8 @@ async function practiceMode(): Promise<void> {
 
   await s.run('cd /tmp && mkdir cybersecurity');
   r = (await s.submit(Q.nav)).body;
+  report(r.feedback?.passed === false && r.feedback.rules.length === 0 && !JSON.stringify(r).includes('/etc'),
+    'A wrong answer says "not yet" without revealing the expected answer', JSON.stringify(r.feedback));
   report(r.feedback?.passed === false && r.progress.best?.passed === true && r.score?.earned === 10,
     'Re-checking Q1 after leaving /etc fails, but the best score (10) is kept', JSON.stringify(r));
 
@@ -112,11 +114,12 @@ async function examMode(): Promise<void> {
   await s.run('mkdir /tmp/cybersecurity');
   const r1 = (await s.submit(Q.dir)).body;
   report(r1.feedback === null && r1.score === null && r1.progress.best === null, 'Submission recorded without revealing the result');
-  report(r1.progress.attemptsRemaining === 1, 'Attempts remaining: 1');
-  const r2 = await s.submit(Q.dir);
-  report(r2.status === 200 && r2.body.progress.locked, 'Second attempt allowed, then locked');
+  report(r1.progress.attemptsRemaining === 2, 'Three tries: 2 remaining after the first');
+  await s.submit(Q.dir);
   const r3 = await s.submit(Q.dir);
-  report(r3.status === 409, 'Third attempt refused (409)');
+  report(r3.status === 200 && r3.body.progress.locked, 'Third try allowed, then the question closes');
+  const r4 = await s.submit(Q.dir);
+  report(r4.status === 409, 'Fourth try refused (409)');
 
   const fin = await s.http.call<ExamResultView>('POST', '/api/attempt/finish');
   report(fin.body.score.earned === 10, 'Results revealed at the end (10/50)');

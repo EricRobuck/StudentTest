@@ -17,6 +17,7 @@ export const currentDirectory: Validator<Spec> = {
         passed: false,
         score: 0,
         message: 'Your terminal is not connected. Reopen the page and try again.',
+        showToStudent: true,
       };
     }
     const actual = normalizeDir(cwd);

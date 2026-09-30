@@ -73,11 +73,18 @@ const checks: Check[] = [
     expected: 'NoNewPrivs: 1',
   },
   {
-    name: 'No setuid/setgid binaries',
+    name: 'Only setuid binary is sudo (blocked unless the exam allows it)',
     argv: ['find', '/', '-xdev', '-perm', '/6000', '-type', 'f'],
     options: { timeoutMs: 20_000 },
-    expect: (r) => r.stdout.trim() === '',
-    expected: '(none)',
+    expect: (r) => r.stdout.trim() === '/usr/bin/sudo',
+    expected: '/usr/bin/sudo',
+  },
+  {
+    name: 'sudo refuses to run in a normal exam container',
+    argv: ['sudo', '-n', 'true'],
+    options: { user: 'student' },
+    expect: (r) => r.exitCode !== 0,
+    expected: 'non-zero exit (no new privileges)',
   },
   {
     name: 'No Docker socket inside',

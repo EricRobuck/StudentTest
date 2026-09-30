@@ -20,7 +20,12 @@ const RESET = '\x1b[0m';
  * live bytes both ways. Dropped connections reconnect automatically and land
  * in the same shell.
  */
-export function createWebSocketTransport(): TerminalTransport {
+export interface WebSocketTransportOptions {
+  /** The server closed the terminal because the test is locked. */
+  onLocked?: () => void;
+}
+
+export function createWebSocketTransport(options: WebSocketTransportOptions = {}): TerminalTransport {
   let handlers: TerminalTransportHandlers | null = null;
   let socket: WebSocket | null = null;
   let disposed = false;
@@ -98,6 +103,10 @@ export function createWebSocketTransport(): TerminalTransport {
       switch (event.code) {
         case TERMINAL_CLOSE.REPLACED:
           handlers?.onStatus('disconnected', 'opened in another window — refresh to continue here');
+          return;
+        case TERMINAL_CLOSE.LOCKED:
+          handlers?.onStatus('disconnected', 'test locked — call your instructor');
+          options.onLocked?.();
           return;
         case TERMINAL_CLOSE.ENDED:
           handlers?.onStatus('disconnected', 'session ended — refresh to start again');

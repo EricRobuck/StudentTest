@@ -1,4 +1,12 @@
-import type { AttemptEndReason, AttemptStatus } from '@linuxlab/shared';
+import type {
+  AttemptEndReason,
+  AttemptStatus,
+  ExamSettings,
+  QuestionContent,
+  QuestionSource,
+  QuestionStatus,
+  QuestionVerification,
+} from '@linuxlab/shared';
 
 // Storage interfaces. Services depend only on these; sqliteRepositories.ts
 // implements them today and a PostgreSQL implementation can replace it.
@@ -19,6 +27,56 @@ export interface AttemptRecord {
   deadlineAt: string | null;
   completedAt: string | null;
   currentQuestionId: string | null;
+  /** The exam as it was when this attempt started (null for older attempts). */
+  examSnapshot: unknown | null;
+  /** Set when the student left the test screen; cleared when the instructor unlocks. */
+  lockedAt: string | null;
+  lockReason: string | null;
+}
+
+export interface IntegrityEventRecord {
+  type: 'left' | 'unlocked';
+  reason: string;
+  at: string;
+}
+
+export interface ExamRecord {
+  id: string;
+  title: string;
+  description: string | null;
+  settings: ExamSettings;
+  /** Offered to students on the start screen (if it has approved questions). */
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExamQuestionRecord {
+  id: string;
+  examId: string;
+  position: number;
+  status: QuestionStatus;
+  source: QuestionSource;
+  content: QuestionContent;
+  verification: QuestionVerification;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExamRepository {
+  list(): Promise<ExamRecord[]>;
+  get(id: string): Promise<ExamRecord | undefined>;
+  save(exam: ExamRecord): Promise<void>;
+  delete(id: string): Promise<void>;
+  questions(examId: string): Promise<ExamQuestionRecord[]>;
+  allQuestions(): Promise<ExamQuestionRecord[]>;
+  getQuestion(id: string): Promise<ExamQuestionRecord | undefined>;
+  saveQuestion(q: ExamQuestionRecord): Promise<void>;
+  deleteQuestion(id: string): Promise<void>;
+  /** Sets positions 1..n in the given order. */
+  reorder(examId: string, questionIds: string[]): Promise<void>;
+  getSetting(key: string): Promise<string | undefined>;
+  setSetting(key: string, value: string): Promise<void>;
 }
 
 export interface AttemptQuestionRecord {
@@ -70,6 +128,13 @@ export interface AttemptRepository {
   get(id: string): Promise<AttemptRecord | undefined>;
   questions(attemptId: string): Promise<AttemptQuestionRecord[]>;
   setCurrentQuestion(id: string, questionId: string): Promise<void>;
+  /** Locks the attempt (if not already locked) and logs the event. Returns true if it was newly locked. */
+  lock(id: string, reason: string, at: string): Promise<boolean>;
+  /** Unlocks and logs the event. Returns true if it was locked. */
+  unlock(id: string, by: string, at: string): Promise<boolean>;
+  integrityEvents(id: string): Promise<IntegrityEventRecord[]>;
+  /** Permanently removes an attempt and everything recorded for it. False if it didn't exist. */
+  delete(id: string): Promise<boolean>;
   /** Records who is taking an attempt that started without a name. */
   setStudent(id: string, studentName: string, className: string): Promise<void>;
   /** Marks the attempt completed; returns false if it was already completed. */
@@ -118,4 +183,5 @@ export interface Repositories {
   submissions: SubmissionRepository;
   commands: CommandLogRepository;
   snapshots: SnapshotRepository;
+  exams: ExamRepository;
 }

@@ -4,12 +4,18 @@ import { config } from '../config.js';
 import { sendError } from '../http/errors.js';
 import { INSTRUCTOR_COOKIE, requireInstructor } from '../http/requireInstructor.js';
 import { readCookie, requireAllowedOrigin } from '../http/security.js';
+import type { AttemptService } from '../modules/attempts/attemptService.js';
 import type { InstructorAuth } from '../modules/instructor/instructorAuth.js';
 import type { InstructorService } from '../modules/instructor/instructorService.js';
 
 const ATTEMPT_ID = /^[0-9a-f-]{36}$/;
 
-export function instructorRouter(auth: InstructorAuth, service: InstructorService): Router {
+export function instructorRouter(
+  auth: InstructorAuth,
+  service: InstructorService,
+  attempts: AttemptService,
+  deleteAttempt: (attemptId: string) => Promise<boolean>,
+): Router {
   const router = Router();
   const sameOrigin = requireAllowedOrigin(config.security.allowedOrigins);
   const instructorOnly = requireInstructor(auth);
@@ -69,6 +75,30 @@ export function instructorRouter(auth: InstructorAuth, service: InstructorServic
       const body: AttemptDetail | undefined = await service.attemptDetail(attemptId);
       if (!body) return sendError(res, 404, 'NOT_FOUND', 'Attempt not found');
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/instructor/attempts/:attemptId/unlock — let a student who left the screen continue.
+  router.post('/instructor/attempts/:attemptId/unlock', sameOrigin, instructorOnly, async (req, res, next) => {
+    const attemptId = String(req.params.attemptId);
+    if (!ATTEMPT_ID.test(attemptId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid attempt id');
+    try {
+      await attempts.unlock(attemptId);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DELETE /api/instructor/attempts/:attemptId — remove an attempt and all its records.
+  router.delete('/instructor/attempts/:attemptId', sameOrigin, instructorOnly, async (req, res, next) => {
+    const attemptId = String(req.params.attemptId);
+    if (!ATTEMPT_ID.test(attemptId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid attempt id');
+    try {
+      if (!(await deleteAttempt(attemptId))) return sendError(res, 404, 'NOT_FOUND', 'Attempt not found');
+      res.status(204).end();
     } catch (err) {
       next(err);
     }

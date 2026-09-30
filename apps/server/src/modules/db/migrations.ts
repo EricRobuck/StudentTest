@@ -124,4 +124,68 @@ export const migrations: Migration[] = [
       CREATE INDEX exam_attempts_class ON exam_attempts(class_name);
     `,
   },
+  {
+    version: 5,
+    name: 'exams and questions in the database',
+    sql: `
+      CREATE TABLE exams (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL,
+        description TEXT,
+        settings    TEXT NOT NULL,           -- JSON ExamSettings
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      );
+
+      CREATE TABLE exam_questions (
+        id           TEXT PRIMARY KEY,       -- also referenced by submissions/command_log
+        exam_id      TEXT NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        position     INTEGER NOT NULL,
+        status       TEXT NOT NULL CHECK (status IN ('draft', 'approved')),
+        source       TEXT NOT NULL CHECK (source IN ('sample', 'manual', 'ai')),
+        content      TEXT NOT NULL,          -- JSON QuestionContent (includes the answers)
+        verification TEXT NOT NULL,          -- JSON QuestionVerification
+        created_at   TEXT NOT NULL,
+        updated_at   TEXT NOT NULL
+      );
+      CREATE INDEX exam_questions_exam ON exam_questions(exam_id, position);
+
+      CREATE TABLE app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
+      -- The exam exactly as the student got it (approved questions only), so
+      -- later edits never change an exam in progress or its grading.
+      ALTER TABLE exam_attempts ADD COLUMN exam_snapshot TEXT;
+    `,
+  },
+  {
+    version: 6,
+    name: 'several exams can be open at once',
+    sql: `
+      -- Replaces the single "active exam": students choose among enabled exams.
+      ALTER TABLE exams ADD COLUMN enabled INTEGER NOT NULL DEFAULT 0;
+      UPDATE exams SET enabled = 1
+        WHERE id = (SELECT value FROM app_settings WHERE key = 'active_exam_id');
+    `,
+  },
+  {
+    version: 7,
+    name: 'lock the test when the student leaves the screen',
+    sql: `
+      ALTER TABLE exam_attempts ADD COLUMN locked_at TEXT;      -- null = not locked
+      ALTER TABLE exam_attempts ADD COLUMN lock_reason TEXT;
+
+      -- Every time a student left the screen and every unlock, for the instructor.
+      CREATE TABLE integrity_events (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        attempt_id TEXT NOT NULL REFERENCES exam_attempts(id),
+        type       TEXT NOT NULL CHECK (type IN ('left', 'unlocked')),
+        reason     TEXT NOT NULL,
+        at         TEXT NOT NULL
+      );
+      CREATE INDEX integrity_events_attempt ON integrity_events(attempt_id, at);
+    `,
+  },
 ];

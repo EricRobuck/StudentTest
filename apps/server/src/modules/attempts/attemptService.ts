@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  AttemptEndReason,
-  AttemptView,
-  ExamResultView,
-  QuestionProgress,
-  ScoreView,
-  StudentInfo,
+import {
+  effectiveMaxAttempts,
+  tryCredit,
+  type AttemptEndReason,
+  type AttemptView,
+  type ExamResultView,
+  type QuestionProgress,
+  type ScoreView,
+  type StudentInfo,
 } from '@linuxlab/shared';
 import type { AttemptRecord, Repositories, SubmissionRecord } from '../db/index.js';
 import { orderedQuestions } from '../exams/examService.js';
@@ -18,14 +20,15 @@ import type { ExamDefinition } from '../exams/types.js';
 //  - The exam score is the sum of those points.
 //  - Deadlines use the server clock only.
 
-export type SubmitBlock = 'completed' | 'locked' | 'no-attempts-left';
+/** 'locked' = question locked after submit; 'test-locked' = student left the screen. */
+export type SubmitBlock = 'completed' | 'locked' | 'no-attempts-left' | 'test-locked';
 
 export class AttemptService {
   private readonly completedListeners: Array<(attemptId: string) => void> = [];
 
   constructor(
     private readonly repos: Repositories,
-    private readonly examById: (id: string) => ExamDefinition | undefined,
+    private readonly examFor: (attempt: AttemptRecord) => ExamDefinition | undefined,
   ) {}
 
   /** Called when an attempt completes (finish button or time expiry). */
@@ -48,6 +51,10 @@ export class AttemptService {
       deadlineAt: limit === null ? null : new Date(now.getTime() + limit * 60_000).toISOString(),
       completedAt: null,
       currentQuestionId: questions[0]?.id ?? null,
+      // Frozen copy: later edits to the exam never change this attempt.
+      examSnapshot: exam,
+      lockedAt: null,
+      lockReason: null,
     };
     await this.repos.attempts.create(
       attempt,
@@ -85,8 +92,39 @@ export class AttemptService {
     }
   }
 
+  /**
+   * The student left the test screen. Locks the attempt if its test uses
+   * "lock on leave"; the instructor must unlock it. Returns true if the
+   * attempt is locked afterwards.
+   */
+  async reportLeft(attempt: AttemptRecord, reason: string): Promise<boolean> {
+    const exam = this.examFor(attempt);
+    if (attempt.status !== 'in_progress' || !exam || exam.settings.lockOnLeave === false) return false;
+    if (attempt.lockedAt) return true;
+    const newly = await this.repos.attempts.lock(attempt.id, reason, new Date().toISOString());
+    if (newly) {
+      console.log(`[integrity] attempt ${attempt.id} (${attempt.studentName ?? 'unnamed'}) LOCKED: ${JSON.stringify(reason)}`);
+      for (const listener of this.lockedListeners) listener(attempt.id);
+    }
+    return true;
+  }
+
+  /** Called when an attempt gets locked (e.g. to close the student's terminal). */
+  onLocked(listener: (attemptId: string) => void): void {
+    this.lockedListeners.push(listener);
+  }
+
+  private readonly lockedListeners: Array<(attemptId: string) => void> = [];
+
+  /** Instructor unlocks a locked attempt. */
+  async unlock(attemptId: string): Promise<boolean> {
+    const unlocked = await this.repos.attempts.unlock(attemptId, 'unlocked by instructor', new Date().toISOString());
+    if (unlocked) console.log(`[integrity] attempt ${attemptId} unlocked by instructor`);
+    return unlocked;
+  }
+
   async setCurrentQuestion(attempt: AttemptRecord, questionId: string): Promise<boolean> {
-    const exam = this.examById(attempt.examId);
+    const exam = this.examFor(attempt);
     if (!exam?.questions.some((q) => q.id === questionId)) return false;
     if (attempt.status !== 'in_progress' || attempt.currentQuestionId === questionId) return true;
     await this.repos.attempts.setCurrentQuestion(attempt.id, questionId);
@@ -101,9 +139,10 @@ export class AttemptService {
   /** Why a submission for this question would be refused, or null if allowed. */
   submitBlock(exam: ExamDefinition, attempt: AttemptRecord, questionId: string, subs: SubmissionRecord[]): SubmitBlock | null {
     if (attempt.status !== 'in_progress') return 'completed';
+    if (attempt.lockedAt) return 'test-locked';
     const count = subs.filter((s) => s.questionId === questionId).length;
     if (exam.settings.lockAfterSubmit && count > 0) return 'locked';
-    const max = exam.settings.maxAttemptsPerQuestion;
+    const max = effectiveMaxAttempts(exam.settings);
     if (max !== null && count >= max) return 'no-attempts-left';
     return null;
   }
@@ -128,15 +167,18 @@ export class AttemptService {
 
   progress(exam: ExamDefinition, attempt: AttemptRecord, subs: SubmissionRecord[], questionId: string): QuestionProgress {
     const mine = subs.filter((s) => s.questionId === questionId);
-    const max = exam.settings.maxAttemptsPerQuestion;
+    const max = effectiveMaxAttempts(exam.settings);
     const best = bestOf(mine);
     const revealed = exam.settings.showFeedback || attempt.status === 'completed';
+    const locked = this.submitBlock(exam, attempt, questionId, subs) !== null;
+    const points = exam.questions.find((q) => q.id === questionId)?.points ?? 0;
     return {
       questionId,
       attempts: mine.length,
       attemptsRemaining: max === null ? null : Math.max(0, max - mine.length),
-      locked: this.submitBlock(exam, attempt, questionId, subs) !== null,
+      locked,
       best: best && revealed ? { passed: best.passed, pointsAwarded: best.pointsAwarded } : null,
+      nextTryPoints: locked ? null : round2(points * tryCredit(exam.settings, mine.length)),
     };
   }
 
@@ -159,6 +201,7 @@ export class AttemptService {
       deadlineAt: attempt.deadlineAt,
       serverTime: new Date().toISOString(),
       currentQuestionId: attempt.currentQuestionId,
+      locked: attempt.lockedAt ? { at: attempt.lockedAt, reason: attempt.lockReason ?? '' } : null,
       score: scoreVisible ? this.score(exam, subs) : null,
       questions: orderedQuestions(exam).map((q) => this.progress(exam, attempt, subs, q.id)),
     };

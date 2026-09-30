@@ -4,11 +4,13 @@ import { sendError } from './http/errors.js';
 import { createLimiters } from './http/rateLimit.js';
 import { securityHeaders } from './http/securityHeaders.js';
 import type { AttemptService } from './modules/attempts/attemptService.js';
+import type { AuthoringService } from './modules/authoring/authoringService.js';
 import type { ContainerRuntime } from './modules/containers/index.js';
 import type { InstructorAuth } from './modules/instructor/instructorAuth.js';
 import type { InstructorService } from './modules/instructor/instructorService.js';
 import type { SessionManager } from './modules/sessions/sessionManager.js';
 import { attemptRouter } from './routes/attempt.js';
+import { authoringRouter } from './routes/authoring.js';
 import { examRouter } from './routes/exam.js';
 import { healthRouter } from './routes/health.js';
 import { instructorRouter } from './routes/instructor.js';
@@ -20,15 +22,20 @@ export interface AppDeps {
   attempts: AttemptService;
   instructorAuth: InstructorAuth;
   instructor: InstructorService;
+  authoring: AuthoringService;
+  /** Instructor action: ends the attempt's environments and deletes all its records. */
+  deleteAttempt: (attemptId: string) => Promise<boolean>;
 }
 
 /** Builds the Express app without listening, so it can be tested in isolation. */
-export function createApp({ runtime, sessions, attempts, instructorAuth, instructor }: AppDeps): Express {
+export function createApp({ runtime, sessions, attempts, instructorAuth, instructor, authoring, deleteAttempt }: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
   app.use(securityHeaders);
-  // No endpoint needs more than a few hundred bytes of JSON.
+  // Question editing (setup files) needs more room; the parser that runs first wins.
+  app.use('/api/instructor/exams', express.json({ limit: '256kb' }));
+  // Student endpoints never need more than a few hundred bytes of JSON.
   app.use(express.json({ limit: '16kb' }));
 
   const limiters = createLimiters(config.security.rateLimits);
@@ -36,7 +43,8 @@ export function createApp({ runtime, sessions, attempts, instructorAuth, instruc
   app.use('/api', sessionRouter(sessions, attempts, limiters));
   app.use('/api', examRouter({ sessions, attempts, runtime, limiters }));
   app.use('/api', attemptRouter(sessions, attempts, limiters));
-  app.use('/api', instructorRouter(instructorAuth, instructor));
+  app.use('/api', instructorRouter(instructorAuth, instructor, attempts, deleteAttempt));
+  app.use('/api', authoringRouter(instructorAuth, authoring));
 
   // The backend only serves /api and /ws. Anyone who opens it directly in a
   // browser is sent to the web app instead of seeing "Cannot GET /".

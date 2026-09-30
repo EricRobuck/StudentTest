@@ -14,12 +14,17 @@
     "smoke:commands": "tsx scripts/smoke-commands.ts",
     "smoke:instructor": "tsx scripts/smoke-instructor.ts",
     "smoke:security": "tsx scripts/smoke-security.ts",
+    "smoke:lock": "tsx scripts/smoke-lock.ts",
+    "smoke:tries": "tsx scripts/smoke-tries.ts",
+    "smoke:authoring": "tsx scripts/smoke-authoring.ts",
     "commands:show": "tsx scripts/show-commands.ts",
+    "ai:try": "tsx scripts/try-generate.ts",
     "containers:cleanup": "tsx scripts/cleanup-containers.ts"
   },
   "dependencies": {
     "dockerode": "^5.0.1",
     "express": "^5.2.1",
+    "openai": "^7.23.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {

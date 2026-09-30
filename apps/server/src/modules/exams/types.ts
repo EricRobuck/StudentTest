@@ -1,8 +1,10 @@
-import type { Difficulty, ExamMode, SetupStep, ValidationSpec } from '@linuxlab/shared';
+import type { ExamSettings, QuestionContent } from '@linuxlab/shared';
 
-// Server-side exam definitions. These contain the answers (validators), so
-// they are never sent to students; see toStudentExam() for the redacted view.
-// Phase 7 stores these in the database; the shape stays the same.
+// Server-side exam definitions. These contain the answers (validators and
+// model solutions), so they are never sent to students; see toStudentExam()
+// for the redacted view.
+
+export type { ExamSettings };
 
 /**
  * Which kind of lab environment runs the question. Only Linux exists today;
@@ -10,40 +12,18 @@ import type { Difficulty, ExamMode, SetupStep, ValidationSpec } from '@linuxlab/
  */
 export type LabType = 'linux';
 
-export interface QuestionDefinition {
+export interface QuestionDefinition extends QuestionContent {
   id: string;
   /** Position within the exam, ascending. */
   order: number;
   labType: LabType;
-  title: string;
-  /** The task. Text inside `backticks` is shown as code. */
-  text: string;
-  instructions?: string;
-  points: number;
-  category: string;
-  difficulty: Difficulty;
-  /** Runs in the container before the question is shown (not used by the sample exam). */
-  setup: SetupStep[];
-  validation: ValidationSpec;
-  hint?: string;
-  /** Shown after completion in practice mode (Phase 7). */
-  explanation?: string;
 }
 
-export interface ExamSettings {
-  mode: ExamMode;
-  allowHints: boolean;
-  /** null = untimed. */
-  timeLimitMinutes: number | null;
-  /** null = unlimited attempts per question. */
-  maxAttemptsPerQuestion: number | null;
-  /** Show pass/fail and reasons right after each submission. */
-  showFeedback: boolean;
-  showScoreDuringExam: boolean;
-  /** Accept only one submission per question. */
-  lockAfterSubmit: boolean;
-}
-
+/**
+ * An exam as students take it: only approved questions, in order. A copy is
+ * frozen onto each attempt when it starts, so later edits never change an
+ * exam a student is already taking.
+ */
 export interface ExamDefinition {
   id: string;
   title: string;
