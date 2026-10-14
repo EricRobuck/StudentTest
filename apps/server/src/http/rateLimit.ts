@@ -66,7 +66,10 @@ export function createLimiters(cfg: {
   };
 }
 
-/** The client's address as seen by this server (see SECURITY.md about reverse proxies). */
+/**
+ * The client's address: the connection's, or with TRUST_PROXY=loopback the
+ * one a local reverse proxy reports (Express's req.ip). See SECURITY.md R7.
+ */
 export function clientAddress(req: Request): string {
-  return req.socket.remoteAddress ?? 'unknown';
+  return req.ip ?? req.socket.remoteAddress ?? 'unknown';
 }

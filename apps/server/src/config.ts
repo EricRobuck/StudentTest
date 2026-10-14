@@ -85,6 +85,11 @@ export const config = {
     // Cookies are sent over HTTPS only when the site is served over HTTPS
     // (automatic when WEB_URL is https://; COOKIE_SECURE=true/false overrides).
     cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : webUrl.startsWith('https://'),
+    // TRUST_PROXY=loopback: an HTTPS reverse proxy on this same machine (e.g.
+    // Caddy) forwards every request, so take the student's real address from
+    // its X-Forwarded-For header. Only connections from 127.0.0.1/::1 are
+    // trusted, so nobody else can fake an address. Unset = use the connection.
+    trustProxy: process.env.TRUST_PROXY === 'loopback' ? 'loopback' : false,
     // Shared instructor password (interim until instructor accounts exist).
     // Unset = instructor pages disabled. There is deliberately no default.
     instructorPassword: readInstructorPassword(),

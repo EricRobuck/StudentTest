@@ -32,6 +32,7 @@ export function createApp({ runtime, sessions, attempts, instructorAuth, instruc
   const app = express();
 
   app.disable('x-powered-by');
+  app.set('trust proxy', config.security.trustProxy);
   app.use(securityHeaders);
   // Question editing (setup files) needs more room; the parser that runs first wins.
   app.use('/api/instructor/exams', express.json({ limit: '256kb' }));

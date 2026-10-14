@@ -98,6 +98,21 @@ private on your computer.
 - **Keep the PC awake and plugged in**, and don't let it sleep during a test.
   Your address can change from day to day, so read it from the printout.
 
+## Putting it online (Ubuntu server, e.g. AWS EC2)
+
+On a fresh Ubuntu 24.04 server (about 4 CPUs and 16 GB of memory for a class
+of 30, 30 GB disk, ports 80 and 443 open):
+
+```bash
+git clone https://github.com/EricRobuck/StudentTest.git
+sudo bash StudentTest/deploy/setup-ubuntu.sh
+```
+
+It installs Docker, Node.js and Caddy, asks for the instructor password and
+OpenAI key, builds everything, and serves the exam over HTTPS at
+`https://<ip-with-dashes>.sslip.io` (or `SITE_DOMAIN=your.domain`). It starts
+by itself after a reboot. Run the same script again to update.
+
 ## Writing exams (and letting AI draft questions)
 
 In the instructor pages, open **Exams** to create exams and write questions.

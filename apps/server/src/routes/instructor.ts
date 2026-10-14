@@ -3,6 +3,7 @@ import type { AttemptDetail, AttemptSummary, InstructorStatus } from '@linuxlab/
 import { config } from '../config.js';
 import { sendError } from '../http/errors.js';
 import { INSTRUCTOR_COOKIE, requireInstructor } from '../http/requireInstructor.js';
+import { clientAddress } from '../http/rateLimit.js';
 import { readCookie, requireAllowedOrigin } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
 import type { InstructorAuth } from '../modules/instructor/instructorAuth.js';
@@ -33,7 +34,7 @@ export function instructorRouter(
     if (typeof password !== 'string' || password.length === 0 || password.length > 200) {
       return sendError(res, 400, 'BAD_REQUEST', 'Password is required');
     }
-    const outcome = auth.login(password, req.socket.remoteAddress ?? 'unknown');
+    const outcome = auth.login(password, clientAddress(req));
     if (!outcome.ok) {
       if (outcome.reason === 'disabled') {
         return sendError(res, 503, 'INSTRUCTOR_DISABLED', 'Instructor access is not configured on this server (INSTRUCTOR_PASSWORD).');
