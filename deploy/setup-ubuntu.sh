@@ -67,12 +67,10 @@ fi
 mkdir -p "$APP_DIR/data"
 
 # Public address → free HTTPS name (1.2.3.4 → 1-2-3-4.sslip.io) unless a domain is given.
-if [[ -z ${SITE_DOMAIN:-} ]]; then
-  TOKEN=$(curl -s -m 3 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
-  PUBLIC_IP=$(curl -s -m 3 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || true)
-  [[ $PUBLIC_IP =~ ^[0-9.]+$ ]] || PUBLIC_IP=$(curl -s -m 5 https://checkip.amazonaws.com | tr -d '[:space:]')
-  SITE_DOMAIN="${PUBLIC_IP//./-}.sslip.io"
-fi
+TOKEN=$(curl -s -m 3 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
+PUBLIC_IP=$(curl -s -m 3 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || true)
+[[ $PUBLIC_IP =~ ^[0-9.]+$ ]] || PUBLIC_IP=$(curl -s -m 5 https://checkip.amazonaws.com | tr -d '[:space:]')
+SITE_DOMAIN=${SITE_DOMAIN:-"${PUBLIC_IP//./-}.sslip.io"}
 SITE_URL="https://$SITE_DOMAIN"
 
 say "Settings ($APP_DIR/.env)"
@@ -143,6 +141,11 @@ systemctl restart linuxlab
 say "Configuring HTTPS for $SITE_DOMAIN"
 CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 cat > /etc/caddy/Caddyfile <<EOF
+{
+	# Browsers send no name when connecting to a bare IP: use the IP certificate then.
+	default_sni $PUBLIC_IP
+}
+
 $SITE_DOMAIN {
 	encode gzip
 
@@ -169,6 +172,20 @@ $SITE_DOMAIN {
 		try_files {path} /index.html
 		file_server
 	}
+}
+
+# People type the bare IP address (browsers often try https first): send them
+# to the real name. Let's Encrypt issues short-lived certificates for IPs.
+http://$PUBLIC_IP {
+	redir $SITE_URL{uri}
+}
+https://$PUBLIC_IP {
+	tls {
+		issuer acme {
+			profile shortlived
+		}
+	}
+	redir $SITE_URL{uri}
 }
 EOF
 # Caddy must be able to read the built site.
