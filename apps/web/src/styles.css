@@ -979,3 +979,15 @@ ul.plain {
   width: 2rem;
   text-align: center;
 }
+
+.offline-screen {
+  background: #fffbeb;
+}
+
+.offline-card {
+  border-color: var(--warn);
+}
+
+.offline-card h2 {
+  color: var(--warn);
+}

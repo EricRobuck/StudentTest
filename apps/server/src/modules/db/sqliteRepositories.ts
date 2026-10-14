@@ -147,14 +147,16 @@ export function createSqliteRepositories(db: Database): Repositories {
       },
       async lock(id, reason, at) {
         return inTransaction(db, () => {
-          db.prepare("INSERT INTO integrity_events (attempt_id, type, reason, at) VALUES (?, 'left', ?, ?)").run(id, reason, at);
           const r = db
             .prepare(
               `UPDATE exam_attempts SET locked_at = ?, lock_reason = ?
                WHERE id = ? AND locked_at IS NULL AND status = 'in_progress'`,
             )
             .run(at, reason, id);
-          return Number(r.changes) > 0;
+          // Only a new lock is an event: a retried report (after a dropped connection) isn't logged twice.
+          if (Number(r.changes) === 0) return false;
+          db.prepare("INSERT INTO integrity_events (attempt_id, type, reason, at) VALUES (?, 'left', ?, ?)").run(id, reason, at);
+          return true;
         });
       },
       async unlock(id, by, at) {

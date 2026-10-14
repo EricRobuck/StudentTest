@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { AttemptView, ExamResultView, StudentExam, SubmitResult } from '@linuxlab/shared';
 import { api } from './api/client';
 import { BackendStatus } from './components/BackendStatus';
@@ -30,11 +30,18 @@ export function App() {
       ),
     [updateAttempt],
   );
+  // A leave the server hasn't confirmed yet (e.g. the Wi-Fi dropped). The lock
+  // screen keeps re-sending it, so a lost connection can't hide leaving.
+  const pendingLeave = useRef<string | null>(null);
   useLeaveDetection(inProgress && state.exam.rules.lockOnLeave && !locked, (reason, closing) => {
+    pendingLeave.current = reason;
     if (!closing) markLocked(); // cover the screen right away; the server confirms below
     api
       .reportLeft(reason)
-      .then((attempt) => updateAttempt(() => attempt))
+      .then((attempt) => {
+        pendingLeave.current = null;
+        updateAttempt(() => attempt);
+      })
       .catch(() => undefined);
   });
   const onLockChanged = useCallback(
@@ -79,7 +86,7 @@ export function App() {
         </main>
       ) : state.kind === 'in_progress' && state.attempt.locked ? (
         <main className="exam-body exam-body-single">
-          <LockedScreen studentName={state.student.name} onChanged={onLockChanged} />
+          <LockedScreen studentName={state.student.name} pendingLeave={pendingLeave} onChanged={onLockChanged} />
         </main>
       ) : state.kind === 'completed' ? (
         <main className="exam-body exam-body-single">
