@@ -165,10 +165,41 @@ export class AttemptService {
     });
   }
 
+  /**
+   * The points a student has on one question: their best submission, where a
+   * correct answer is worth the points of that try (100% / 90% / 60%) and,
+   * once the question is final, a wrong answer earns partial credit for the
+   * share of checks it passed (at that try's value). Never lowered by trying again.
+   */
+  questionResult(
+    exam: ExamDefinition,
+    attempt: AttemptRecord,
+    questionId: string,
+    subs: SubmissionRecord[],
+  ): QuestionResult {
+    const question = exam.questions.find((q) => q.id === questionId);
+    const mine = subs.filter((s) => s.questionId === questionId);
+    const passed = mine.some((s) => s.passed);
+    const final = attempt.status === 'completed' || passed || this.noTriesLeft(exam, mine.length);
+    let points = 0;
+    for (const s of mine) {
+      const value = s.passed ? s.pointsAwarded : final && question ? partialPoints(exam, question, s) : 0;
+      points = Math.max(points, value);
+    }
+    points = round2(points);
+    return { passed, points, partial: !passed && points > 0, final, submitted: mine.length > 0 };
+  }
+
+  private noTriesLeft(exam: ExamDefinition, count: number): boolean {
+    if (exam.settings.lockAfterSubmit && count > 0) return true;
+    const max = effectiveMaxAttempts(exam.settings);
+    return max !== null && count >= max;
+  }
+
   progress(exam: ExamDefinition, attempt: AttemptRecord, subs: SubmissionRecord[], questionId: string): QuestionProgress {
     const mine = subs.filter((s) => s.questionId === questionId);
     const max = effectiveMaxAttempts(exam.settings);
-    const best = bestOf(mine);
+    const result = this.questionResult(exam, attempt, questionId, subs);
     const revealed = exam.settings.showFeedback || attempt.status === 'completed';
     const locked = this.submitBlock(exam, attempt, questionId, subs) !== null;
     const points = exam.questions.find((q) => q.id === questionId)?.points ?? 0;
@@ -177,15 +208,15 @@ export class AttemptService {
       attempts: mine.length,
       attemptsRemaining: max === null ? null : Math.max(0, max - mine.length),
       locked,
-      best: best && revealed ? { passed: best.passed, pointsAwarded: best.pointsAwarded } : null,
+      best: result.submitted && revealed ? { passed: result.passed, pointsAwarded: result.points, partial: result.partial } : null,
       nextTryPoints: locked ? null : round2(points * tryCredit(exam.settings, mine.length)),
     };
   }
 
-  score(exam: ExamDefinition, subs: SubmissionRecord[]): ScoreView {
+  score(exam: ExamDefinition, attempt: AttemptRecord, subs: SubmissionRecord[]): ScoreView {
     const questions = orderedQuestions(exam);
     return {
-      earned: round2(questions.reduce((sum, q) => sum + (bestOf(subs.filter((s) => s.questionId === q.id))?.pointsAwarded ?? 0), 0)),
+      earned: round2(questions.reduce((sum, q) => sum + this.questionResult(exam, attempt, q.id, subs).points, 0)),
       max: questions.reduce((sum, q) => sum + q.points, 0),
     };
   }
@@ -202,7 +233,7 @@ export class AttemptService {
       serverTime: new Date().toISOString(),
       currentQuestionId: attempt.currentQuestionId,
       locked: attempt.lockedAt ? { at: attempt.lockedAt, reason: attempt.lockReason ?? '' } : null,
-      score: scoreVisible ? this.score(exam, subs) : null,
+      score: scoreVisible ? this.score(exam, attempt, subs) : null,
       questions: orderedQuestions(exam).map((q) => this.progress(exam, attempt, subs, q.id)),
     };
   }
@@ -210,7 +241,7 @@ export class AttemptService {
   /** Final results. Only valid for completed attempts. */
   async result(exam: ExamDefinition, attempt: AttemptRecord): Promise<ExamResultView> {
     const subs = await this.submissions(attempt.id);
-    const score = this.score(exam, subs);
+    const score = this.score(exam, attempt, subs);
     return {
       examTitle: exam.title,
       studentName: attempt.studentName,
@@ -223,14 +254,15 @@ export class AttemptService {
       canRetake: exam.settings.mode === 'practice',
       questions: orderedQuestions(exam).map((q, i) => {
         const mine = subs.filter((s) => s.questionId === q.id);
-        const best = bestOf(mine);
+        const r = this.questionResult(exam, attempt, q.id, subs);
         return {
           questionId: q.id,
           number: i + 1,
           title: q.title,
-          pointsAwarded: best?.pointsAwarded ?? 0,
+          pointsAwarded: r.points,
           maxPoints: q.points,
-          passed: best?.passed ?? false,
+          passed: r.passed,
+          partial: r.partial,
           attempts: mine.length,
         };
       }),
@@ -238,10 +270,27 @@ export class AttemptService {
   }
 }
 
-function bestOf(subs: SubmissionRecord[]): SubmissionRecord | undefined {
-  let best: SubmissionRecord | undefined;
-  for (const s of subs) if (!best || s.pointsAwarded > best.pointsAwarded) best = s;
-  return best;
+export interface QuestionResult {
+  passed: boolean;
+  points: number;
+  /** Not fully correct, but earned partial credit. */
+  partial: boolean;
+  /** No more tries can change the result (correct, out of tries, or exam over). */
+  final: boolean;
+  submitted: boolean;
+}
+
+/**
+ * Partial credit for one wrong submission: share of checks passed x points x
+ * that try's value. Only for questions where all checks must pass (when any
+ * one check is enough, a passing check already means full marks).
+ */
+function partialPoints(exam: ExamDefinition, question: ExamDefinition['questions'][number], s: SubmissionRecord): number {
+  if (exam.settings.partialCredit === false || question.validation.mode !== 'all') return 0;
+  const rules = Array.isArray(s.ruleResults) ? (s.ruleResults as Array<{ passed?: unknown }>) : [];
+  if (rules.length === 0) return 0;
+  const share = rules.filter((r) => r.passed === true).length / rules.length;
+  return question.points * share * tryCredit(exam.settings, s.attemptNumber - 1);
 }
 
 function isOverdue(a: AttemptRecord): boolean {

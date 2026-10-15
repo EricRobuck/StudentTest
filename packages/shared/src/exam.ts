@@ -58,7 +58,10 @@ export interface RuleResultView {
 /** Immediate result of one submission (only when the exam shows feedback). */
 export interface SubmitFeedback {
   passed: boolean;
+  /** Points the question is worth to the student now (includes partial credit once final). */
   pointsAwarded: number;
+  /** The question is final and the points are partial credit. */
+  partial?: boolean;
   maxPoints: number;
   rules: RuleResultView[];
 }
@@ -78,7 +81,7 @@ export interface QuestionProgress {
   /** No further submissions accepted (attempt limit, lock-after-submit, or exam over). */
   locked: boolean;
   /** Best result so far; null if never submitted or results are hidden until the end. */
-  best: { passed: boolean; pointsAwarded: number } | null;
+  best: { passed: boolean; pointsAwarded: number; partial: boolean } | null;
   /** Points a correct answer earns on the next submission; null when no more submissions are allowed. */
   nextTryPoints: number | null;
 }
@@ -132,6 +135,8 @@ export interface ExamResultView {
     pointsAwarded: number;
     maxPoints: number;
     passed: boolean;
+    /** Not fully correct, but earned partial credit. */
+    partial: boolean;
     attempts: number;
   }>;
 }
@@ -147,6 +152,8 @@ export interface StudentExamRules {
   lockOnLeave: boolean;
   /** Three tries per question: 100% / 90% / 60% of the points, then 0. */
   threeTries: boolean;
+  /** Once a question is final, partial credit for the checks that passed. */
+  partialCredit: boolean;
 }
 
 /** Response body of GET /api/exam. */

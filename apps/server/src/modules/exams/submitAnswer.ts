@@ -67,13 +67,16 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
 
     const after = await deps.attempts.submissions(attempt.id);
     const view = await deps.attempts.view(exam, attempt);
+    const questionNow = deps.attempts.questionResult(exam, attempt, question.id, after);
     const result: SubmitResult = {
       questionId: question.id,
       attemptNumber,
       feedback: exam.settings.showFeedback
         ? {
             passed: grade.passed,
-            pointsAwarded,
+            // A wrong answer on the last try shows the partial credit it earned.
+            pointsAwarded: grade.passed ? pointsAwarded : questionNow.final ? questionNow.points : 0,
+            partial: !grade.passed && questionNow.partial,
             maxPoints: question.points,
             // Only student-facing fields leave the server; `detail` stays here.
             // Students only learn right/wrong. The reasons (e.g. "your terminal is

@@ -32,6 +32,12 @@ export interface ExamSettings {
    * earn 0 and close the question. Missing = true.
    */
   threeTries?: boolean;
+  /**
+   * Once a question is final (no tries left, or the exam is over) and was
+   * never fully correct, the student gets credit for the share of its checks
+   * they passed, at the point value of that try. Missing = true.
+   */
+  partialCredit?: boolean;
 }
 
 /** Share of a question's points a correct answer earns on try 1, 2 and 3 (three-tries rule). */
@@ -330,6 +336,7 @@ export function validateExamSettings(input: unknown): SettingsCheck {
     allowSudo: raw.allowSudo === true,
     lockOnLeave: raw.lockOnLeave !== false,
     threeTries: raw.threeTries !== false,
+    partialCredit: raw.partialCredit !== false,
   };
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value };
 }

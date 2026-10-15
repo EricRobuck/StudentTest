@@ -76,6 +76,8 @@ export interface InstructorQuestionDetail {
   maxPoints: number;
   pointsAwarded: number;
   passed: boolean;
+  /** Not fully correct, but earned partial credit. */
+  partial: boolean;
   validation: ValidationSpec;
   /** Total time this question was the open one. */
   timeSpentSeconds: number;

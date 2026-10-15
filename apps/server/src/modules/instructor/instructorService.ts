@@ -51,15 +51,16 @@ export class InstructorService {
 
     const questions = orderedQuestions(exam).map((q, i) => {
       const mine = subs.filter((s) => s.questionId === q.id);
-      const best = mine.reduce<SubmissionRecord | undefined>((b, s) => (!b || s.pointsAwarded > b.pointsAwarded ? s : b), undefined);
+      const result = this.attempts.questionResult(exam, attempt, q.id, subs);
       return {
         questionId: q.id,
         number: i + 1,
         title: q.title,
         text: q.text,
         maxPoints: q.points,
-        pointsAwarded: best?.pointsAwarded ?? 0,
-        passed: best?.passed ?? false,
+        pointsAwarded: result.points,
+        passed: result.passed,
+        partial: result.partial,
         validation: q.validation,
         timeSpentSeconds: Math.round((timeSpent.get(q.id) ?? 0) / 1000),
         submissions: mine.map((s) => ({
@@ -91,7 +92,7 @@ export class InstructorService {
     commands: CommandLogRecord[],
     events: IntegrityEventRecord[],
   ): AttemptSummary {
-    const score = this.attempts.score(exam, subs);
+    const score = this.attempts.score(exam, attempt, subs);
     return {
       id: attempt.id,
       examId: exam.id,

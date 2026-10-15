@@ -76,6 +76,7 @@ export function toStudentExam(exam: ExamDefinition): StudentExam {
       lockAfterSubmit: s.lockAfterSubmit,
       lockOnLeave: s.lockOnLeave !== false,
       threeTries: s.threeTries !== false,
+      partialCredit: s.partialCredit !== false,
     },
     questions,
   };

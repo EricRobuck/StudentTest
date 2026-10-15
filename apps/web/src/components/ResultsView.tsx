@@ -75,8 +75,8 @@ export function ResultsView({ result, onStartOver, onTakeAnother }: ResultsViewP
               <td>
                 {q.number}. {q.title}
               </td>
-              <td className={q.passed ? 'pass' : 'fail'}>
-                {q.passed ? '✓ Correct' : q.attempts === 0 ? '— Not answered' : '✗ Incorrect'}
+              <td className={q.passed ? 'pass' : q.partial ? 'partial' : 'fail'}>
+                {q.passed ? '✓ Correct' : q.attempts === 0 ? '— Not answered' : q.partial ? '◐ Partial credit' : '✗ Incorrect'}
               </td>
               <td>{q.attempts}</td>
               <td className="num">

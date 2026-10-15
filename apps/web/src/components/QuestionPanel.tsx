@@ -83,8 +83,9 @@ export function QuestionPanel({
         </p>
       )}
       {!lastSubmit && progress?.best && (
-        <p className={`result ${progress.best.passed ? 'result-pass' : 'result-fail'}`}>
-          Best so far: {progress.best.passed ? '✓ Correct' : '✗ Not yet'} — {progress.best.pointsAwarded}/{question.points} points
+        <p className={`result ${progress.best.passed ? 'result-pass' : progress.best.partial ? 'result-partial' : 'result-fail'}`}>
+          {progress.best.passed ? 'Best so far: ✓ Correct' : progress.best.partial ? 'Partial credit' : 'Best so far: ✗ Not yet'} —{' '}
+          {progress.best.pointsAwarded}/{question.points} points
         </p>
       )}
       {submitError && (
@@ -107,6 +108,7 @@ export function QuestionPanel({
       {missed && (progress?.best || lastSubmit?.feedback) && (
         <p className="result result-fail" role="status">
           <strong>✗ Missed</strong>: no tries left on this question.
+          {(progress?.best?.partial || lastSubmit?.feedback?.partial) && ' You got partial credit for the parts you got right.'}
         </p>
       )}
       {!passed && !missed && progress?.attemptsRemaining !== null && progress?.attemptsRemaining !== undefined && (
@@ -125,10 +127,11 @@ export function QuestionPanel({
 }
 
 function FeedbackBox({ feedback }: { feedback: SubmitFeedback }) {
+  const label = feedback.passed ? '✓ Correct' : feedback.partial ? '✗ Not quite: partial credit' : '✗ Not yet';
   return (
-    <div className={`result ${feedback.passed ? 'result-pass' : 'result-fail'}`} role="status">
+    <div className={`result ${feedback.passed ? 'result-pass' : feedback.partial ? 'result-partial' : 'result-fail'}`} role="status">
       <strong>
-        {feedback.passed ? '✓ Correct' : '✗ Not yet'} — {feedback.pointsAwarded}/{feedback.maxPoints} points
+        {label} — {feedback.pointsAwarded}/{feedback.maxPoints} points
       </strong>
       {/* Only technical problems (e.g. terminal not connected) are listed; reasons that would give away the answer are never sent. */}
       {feedback.rules.length > 0 && (

@@ -138,8 +138,8 @@ function QuestionSection({ question: q }: { question: InstructorQuestionDetail }
         <h3>
           {q.number}. {q.title}
         </h3>
-        <span className={q.passed ? 'pass' : 'fail'}>
-          {q.passed ? '✓' : '✗'} {q.pointsAwarded}/{q.maxPoints} points
+        <span className={q.passed ? 'pass' : q.partial ? 'partial' : 'fail'}>
+          {q.passed ? '✓' : q.partial ? '◐ partial credit,' : '✗'} {q.pointsAwarded}/{q.maxPoints} points
         </span>
       </div>
       <p>

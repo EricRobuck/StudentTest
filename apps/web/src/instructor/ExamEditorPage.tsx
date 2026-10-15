@@ -525,7 +525,22 @@ function SettingsEditor({
           </label>
           <p className="muted small">
             A correct answer earns 100% of the points on the first try, 90% on the second and 60% on the third. Three
-            wrong answers earn 0 and close the question.
+            wrong answers close the question.
+          </p>
+        </div>
+        <div className="sudo-setting">
+          <label>
+            <input
+              type="checkbox"
+              checked={s.partialCredit !== false}
+              onChange={(e) => setS({ ...s, partialCredit: e.target.checked })}
+            />{' '}
+            Partial credit once a question is final
+          </label>
+          <p className="muted small">
+            When a student runs out of tries (or the exam ends) without getting a question fully right, they get credit
+            for the share of its checks they passed, at that try's value. Example: 3 of 4 checks on the first try = 7.5
+            of 10 points. While tries remain, students only see "Not yet".
           </p>
         </div>
         <div className="sudo-setting">

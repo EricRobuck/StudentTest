@@ -16,6 +16,7 @@
     "smoke:security": "tsx scripts/smoke-security.ts",
     "smoke:lock": "tsx scripts/smoke-lock.ts",
     "smoke:tries": "tsx scripts/smoke-tries.ts",
+    "smoke:partial": "tsx scripts/smoke-partial.ts",
     "smoke:authoring": "tsx scripts/smoke-authoring.ts",
     "commands:show": "tsx scripts/show-commands.ts",
     "ai:try": "tsx scripts/try-generate.ts",
