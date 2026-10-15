@@ -59,8 +59,9 @@ usermod -aG docker "$APP_USER"
 
 say "Downloading the exam program"
 if [[ -d $APP_DIR/.git ]]; then
-  git -C "$APP_DIR" fetch -q origin "$BRANCH"
-  git -C "$APP_DIR" reset -q --hard "origin/$BRANCH"
+  # The folder belongs to the service account; git refuses to work in it as root.
+  sudo -u "$APP_USER" -H git -C "$APP_DIR" fetch -q origin "$BRANCH"
+  sudo -u "$APP_USER" -H git -C "$APP_DIR" reset -q --hard "origin/$BRANCH"
 else
   git clone -q --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
