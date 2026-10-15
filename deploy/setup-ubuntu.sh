@@ -27,10 +27,12 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 export DEBIAN_FRONTEND=noninteractive
+# Ubuntu installs security updates on its own; wait for them instead of failing.
+apt_get() { apt-get -o DPkg::Lock::Timeout=600 "$@"; }
 
 say "Installing system packages"
-apt-get update -q
-apt-get install -y -q ca-certificates curl git gnupg debian-keyring debian-archive-keyring apt-transport-https
+apt_get update -q
+apt_get install -y -q ca-certificates curl git gnupg debian-keyring debian-archive-keyring apt-transport-https
 
 if ! command -v docker >/dev/null; then
   say "Installing Docker"
@@ -41,15 +43,15 @@ systemctl enable --now docker
 if ! command -v node >/dev/null || [[ $(node -p 'process.versions.node.split(".")[0]') -lt 24 ]]; then
   say "Installing Node.js 24"
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-  apt-get install -y -q nodejs
+  apt_get install -y -q nodejs
 fi
 
 if ! command -v caddy >/dev/null; then
   say "Installing Caddy (HTTPS)"
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -q
-  apt-get install -y -q caddy
+  apt_get update -q
+  apt_get install -y -q caddy
 fi
 
 say "Creating the service account"
