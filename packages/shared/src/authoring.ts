@@ -27,36 +27,37 @@ export interface ExamSettings {
    */
   lockOnLeave?: boolean;
   /**
-   * Three tries per question. A correct answer earns 100% of the points on the
-   * first try, 90% on the second and 60% on the third; three wrong answers
-   * earn 0 and close the question. Missing = true.
+   * TRIES_PER_QUESTION tries per question. A correct answer on any try earns
+   * full points; after the last try the question closes. Missing = true.
    */
+  limitedTries?: boolean;
+  /** Older name of `limitedTries` (exams saved before it was renamed). */
   threeTries?: boolean;
   /**
    * Once a question is final (no tries left, or the exam is over) and was
    * never fully correct, the student gets credit for the share of its checks
-   * they passed, at the point value of that try. Missing = true.
+   * they passed on their best try. Missing = true.
    */
   partialCredit?: boolean;
 }
 
-/** Share of a question's points a correct answer earns on try 1, 2 and 3 (three-tries rule). */
-export const THREE_TRIES_CREDIT = [1, 0.9, 0.6] as const;
+/** Submissions allowed per question under the limited-tries rule. */
+export const TRIES_PER_QUESTION = 4;
 
-/**
- * How many submissions a question allows (null = unlimited). The three-tries
- * rule always means exactly three; "Attempts per question" only applies when
- * it is off.
- */
-export function effectiveMaxAttempts(s: Pick<ExamSettings, 'maxAttemptsPerQuestion' | 'threeTries'>): number | null {
-  if (s.threeTries === false) return s.maxAttemptsPerQuestion;
-  return THREE_TRIES_CREDIT.length;
+/** Whether the limited-tries rule is on (also reads the setting's older name). */
+export function usesLimitedTries(s: Pick<ExamSettings, 'limitedTries' | 'threeTries'>): boolean {
+  return (s.limitedTries ?? s.threeTries) !== false;
 }
 
-/** Share of the points a correct answer earns after `previousTries` earlier submissions. */
-export function tryCredit(s: Pick<ExamSettings, 'threeTries'>, previousTries: number): number {
-  if (s.threeTries === false) return 1;
-  return THREE_TRIES_CREDIT[previousTries] ?? 0;
+/**
+ * How many submissions a question allows (null = unlimited). The
+ * limited-tries rule always means TRIES_PER_QUESTION; "Attempts per question"
+ * only applies when it is off.
+ */
+export function effectiveMaxAttempts(
+  s: Pick<ExamSettings, 'maxAttemptsPerQuestion' | 'limitedTries' | 'threeTries'>,
+): number | null {
+  return usesLimitedTries(s) ? TRIES_PER_QUESTION : s.maxAttemptsPerQuestion;
 }
 
 /** Everything an instructor (or the AI) writes for one question. */
@@ -335,7 +336,7 @@ export function validateExamSettings(input: unknown): SettingsCheck {
     lockAfterSubmit: raw.lockAfterSubmit === true,
     allowSudo: raw.allowSudo === true,
     lockOnLeave: raw.lockOnLeave !== false,
-    threeTries: raw.threeTries !== false,
+    limitedTries: (raw.limitedTries ?? raw.threeTries) !== false,
     partialCredit: raw.partialCredit !== false,
   };
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value };

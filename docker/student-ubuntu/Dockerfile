@@ -16,6 +16,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     TERM=xterm-256color
 
+# Manual pages. The base image is "minimized": dpkg skips every package's
+# docs and `man` is a stub that only says so. Undo that, then reinstall the
+# base packages so `man ls`, `man grep`, ... have pages to show.
+RUN rm -f /etc/dpkg/dpkg.cfg.d/excludes \
+ && (dpkg-divert --quiet --remove --rename /usr/bin/man 2>/dev/null || true) \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends man-db manpages \
+ && apt-get install -y --reinstall --no-install-recommends $(dpkg-query -W -f='${binary:Package} ') \
+ && mandb --quiet \
+ && rm -rf /var/lib/apt/lists/*
+
 # Tools students are expected to use. coreutils, findutils, grep, util-linux
 # (more, whereis), debianutils (which) and bash are already in the base image.
 RUN apt-get update \
@@ -57,7 +68,7 @@ RUN printf '\n# Linux Lab command logging\n. /etc/linuxlab/command-hook.sh\n' >>
  && sed -i '/^HISTCONTROL=/d' /etc/skel/.bashrc /home/student/.bashrc
 
 LABEL org.linuxlab.image="student-ubuntu" \
-      org.linuxlab.version="3"
+      org.linuxlab.version="4"
 
 USER student
 WORKDIR /home/student

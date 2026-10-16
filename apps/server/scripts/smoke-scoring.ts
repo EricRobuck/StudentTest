@@ -114,12 +114,13 @@ async function examMode(): Promise<void> {
   await s.run('mkdir /tmp/cybersecurity');
   const r1 = (await s.submit(Q.dir)).body;
   report(r1.feedback === null && r1.score === null && r1.progress.best === null, 'Submission recorded without revealing the result');
-  report(r1.progress.attemptsRemaining === 2, 'Three tries: 2 remaining after the first');
+  report(r1.progress.attemptsRemaining === 3, 'Four tries: 3 remaining after the first');
   await s.submit(Q.dir);
-  const r3 = await s.submit(Q.dir);
-  report(r3.status === 200 && r3.body.progress.locked, 'Third try allowed, then the question closes');
+  await s.submit(Q.dir);
   const r4 = await s.submit(Q.dir);
-  report(r4.status === 409, 'Fourth try refused (409)');
+  report(r4.status === 200 && r4.body.progress.locked, 'Fourth try allowed, then the question closes');
+  const r5 = await s.submit(Q.dir);
+  report(r5.status === 409, 'Fifth try refused (409)');
 
   const fin = await s.http.call<ExamResultView>('POST', '/api/attempt/finish');
   report(fin.body.score.earned === 10, 'Results revealed at the end (10/50)');

@@ -1,9 +1,9 @@
-// Three-tries rule: a correct answer earns 100% / 90% / 60% of the points on
-// try 1 / 2 / 3; three wrong answers earn 0 and close the question.
+// Limited tries: 4 tries per question, full points for a correct answer on
+// any of them; after the 4th wrong answer the question closes.
 //
 //   npm run smoke:tries -- <baseUrl>
 
-import type { AttemptView, StudentExam, SubmitResult } from '@linuxlab/shared';
+import { TRIES_PER_QUESTION, type AttemptView, type StudentExam, type SubmitResult } from '@linuxlab/shared';
 import { createHttpClient, createReporter, openTerminal, ORIGIN, startStudent } from './lib/testClient.js';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:3001';
@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const http = createHttpClient(base);
   await startStudent(http, 'Katherine Johnson', 'linux-basics-sample');
   const exam = (await http.call<StudentExam>('GET', '/api/exam')).body;
-  report(exam.rules.threeTries && exam.rules.maxAttemptsPerQuestion === 3, 'Test uses three tries per question');
+  report(TRIES_PER_QUESTION === 4 && exam.rules.limitedTries && exam.rules.maxAttemptsPerQuestion === 4, 'Test uses 4 tries per question');
 
   const term = openTerminal(base, { Origin: ORIGIN, Cookie: http.cookie });
   await term.opened;
@@ -26,43 +26,41 @@ async function main(): Promise<void> {
   const submit = (id: string) => http.call<SubmitResult & { error?: { code: string } }>('POST', `/api/exam/questions/${id}/submit`);
 
   const start = (await http.call<AttemptView>('GET', '/api/attempt')).body;
-  const q1 = start.questions.find((p) => p.questionId === 'q1-navigate-etc');
-  report(q1?.nextTryPoints === 10 && q1.attemptsRemaining === 3, 'Before trying: 3 tries, a correct answer earns 10/10');
+  report(start.questions.find((p) => p.questionId === 'q1-navigate-etc')?.attemptsRemaining === 4, 'Before trying: 4 tries left');
 
-  console.log('--- Wrong, wrong, right → 60% ---');
+  console.log('--- Wrong three times, right on the 4th → full points ---');
   let r = (await submit('q1-navigate-etc')).body;
-  report(r.feedback?.passed === false && r.feedback.pointsAwarded === 0 && r.progress.nextTryPoints === 9 && r.progress.attemptsRemaining === 2,
-    'Try 1 wrong: 0 points, 2 tries left, next correct answer earns 9', JSON.stringify(r.progress));
-  r = (await submit('q1-navigate-etc')).body;
-  report(r.progress.nextTryPoints === 6 && r.progress.attemptsRemaining === 1, 'Try 2 wrong: 1 try left, next correct answer earns 6',
+  report(r.feedback?.passed === false && r.feedback.pointsAwarded === 0 && r.progress.attemptsRemaining === 3, 'Try 1 wrong: 0 points, 3 tries left',
     JSON.stringify(r.progress));
+  r = (await submit('q1-navigate-etc')).body;
+  r = (await submit('q1-navigate-etc')).body;
+  report(r.progress.attemptsRemaining === 1 && !r.progress.locked, 'Try 3 wrong: 1 try left', JSON.stringify(r.progress));
   await run('cd /etc');
   r = (await submit('q1-navigate-etc')).body;
-  report(r.feedback?.passed === true && r.feedback.pointsAwarded === 6 && r.score?.earned === 6, 'Try 3 correct: 6/10 (60%)', JSON.stringify(r));
+  report(r.feedback?.passed === true && r.feedback.pointsAwarded === 10 && r.score?.earned === 10, 'Try 4 correct: full 10/10 (no deduction)', JSON.stringify(r));
   const again = await submit('q1-navigate-etc');
-  report(again.status === 409 && again.body.error?.code === 'NO_ATTEMPTS_LEFT', 'No fourth try');
+  report(again.status === 409 && again.body.error?.code === 'NO_ATTEMPTS_LEFT', 'No fifth try');
 
-  console.log('\n--- Wrong, right → 90% ---');
-  r = (await submit('q2-create-directory')).body;
+  console.log('\n--- Wrong once, then right → full points ---');
+  await submit('q2-create-directory');
   await run('mkdir -p /tmp/cybersecurity');
   r = (await submit('q2-create-directory')).body;
-  report(r.feedback?.pointsAwarded === 9 && r.score?.earned === 15, 'Try 2 correct: 9/10 (90%)', JSON.stringify(r));
+  report(r.feedback?.pointsAwarded === 10 && r.score?.earned === 20, 'Try 2 correct: 10/10', JSON.stringify(r.feedback));
 
-  console.log('\n--- Right first time → 100% ---');
+  console.log('\n--- Right first time ---');
   await run('echo "Linux is awesome" > /tmp/cybersecurity/test.txt');
   r = (await submit('q3-create-file')).body;
-  report(r.feedback?.pointsAwarded === 10 && r.score?.earned === 25, 'Try 1 correct: 10/10', JSON.stringify(r));
+  report(r.feedback?.pointsAwarded === 10 && r.score?.earned === 30, 'Try 1 correct: 10/10', JSON.stringify(r.feedback));
 
-  console.log('\n--- Three wrong → missed ---');
-  for (let i = 0; i < 3; i++) r = (await submit('q5-permissions')).body;
-  report(r.progress.attemptsRemaining === 0 && r.progress.locked && r.progress.nextTryPoints === null && r.progress.best?.pointsAwarded === 0,
-    'Three wrong answers: 0 points and the question is closed', JSON.stringify(r.progress));
+  console.log('\n--- Four wrong → question closes ---');
+  for (let i = 0; i < 4; i++) r = (await submit('q5-permissions')).body;
+  report(r.progress.attemptsRemaining === 0 && r.progress.locked && r.progress.best?.pointsAwarded === 0,
+    'Four wrong answers (single-check question): 0 points and the question is closed', JSON.stringify(r.progress));
   await run('chmod 640 /tmp/cybersecurity/test.txt');
-  const late = await submit('q5-permissions');
-  report(late.status === 409, 'Fixing it afterwards cannot be submitted');
+  report((await submit('q5-permissions')).status === 409, 'Fixing it afterwards cannot be submitted');
 
   const fin = await http.call<{ score: { earned: number; max: number } }>('POST', '/api/attempt/finish');
-  report(fin.body.score.earned === 25, `Final score adds up (${fin.body.score.earned}/${fin.body.score.max})`);
+  report(fin.body.score.earned === 30, `Final score adds up (${fin.body.score.earned}/${fin.body.score.max})`);
   term.ws.close();
 }
 

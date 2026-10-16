@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AUTHORING_LIMITS } from '@linuxlab/shared';
+import { AUTHORING_LIMITS, TRIES_PER_QUESTION, usesLimitedTries } from '@linuxlab/shared';
 import type {
   AiStatus,
   Difficulty,
@@ -495,9 +495,9 @@ function SettingsEditor({
             <input
               type="number"
               min={1}
-              value={s.threeTries !== false ? 3 : (s.maxAttemptsPerQuestion ?? '')}
-              disabled={s.threeTries !== false}
-              title={s.threeTries !== false ? 'Set by the three-tries rule below' : undefined}
+              value={usesLimitedTries(s) ? TRIES_PER_QUESTION : (s.maxAttemptsPerQuestion ?? '')}
+              disabled={usesLimitedTries(s)}
+              title={usesLimitedTries(s) ? 'Set by the tries rule below' : undefined}
               onChange={(e) => setS({ ...s, maxAttemptsPerQuestion: numberOrNull(e.target.value) })}
             />
           </label>
@@ -516,16 +516,21 @@ function SettingsEditor({
           <label>
             <input
               type="checkbox"
-              checked={s.threeTries !== false}
+              checked={usesLimitedTries(s)}
               onChange={(e) =>
-                setS({ ...s, threeTries: e.target.checked, ...(e.target.checked ? {} : { maxAttemptsPerQuestion: null }) })
+                setS({
+                  ...s,
+                  limitedTries: e.target.checked,
+                  threeTries: undefined,
+                  ...(e.target.checked ? {} : { maxAttemptsPerQuestion: null }),
+                })
               }
             />{' '}
-            Three tries per question, with fewer points for later tries
+            {TRIES_PER_QUESTION} tries per question
           </label>
           <p className="muted small">
-            A correct answer earns 100% of the points on the first try, 90% on the second and 60% on the third. Three
-            wrong answers close the question.
+            A correct answer earns full points on any of the {TRIES_PER_QUESTION} tries. After {TRIES_PER_QUESTION} wrong
+            answers the question closes.
           </p>
         </div>
         <div className="sudo-setting">
@@ -539,8 +544,8 @@ function SettingsEditor({
           </label>
           <p className="muted small">
             When a student runs out of tries (or the exam ends) without getting a question fully right, they get credit
-            for the share of its checks they passed, at that try's value. Example: 3 of 4 checks on the first try = 7.5
-            of 10 points. While tries remain, students only see "Not yet".
+            for the share of its checks they passed on their best try. Example: 3 of 4 checks = 7.5 of 10 points.
+            While tries remain, students only see "Not yet".
           </p>
         </div>
         <div className="sudo-setting">

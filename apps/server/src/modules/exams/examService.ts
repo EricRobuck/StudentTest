@@ -1,4 +1,4 @@
-import { effectiveMaxAttempts, type StudentExam, type StudentQuestion } from '@linuxlab/shared';
+import { effectiveMaxAttempts, usesLimitedTries, type StudentExam, type StudentQuestion } from '@linuxlab/shared';
 import type { AttemptRecord } from '../db/index.js';
 import type { ExamCatalog } from './examCatalog.js';
 import type { ExamDefinition, QuestionDefinition } from './types.js';
@@ -75,7 +75,7 @@ export function toStudentExam(exam: ExamDefinition): StudentExam {
       showScoreDuringExam: s.showScoreDuringExam,
       lockAfterSubmit: s.lockAfterSubmit,
       lockOnLeave: s.lockOnLeave !== false,
-      threeTries: s.threeTries !== false,
+      limitedTries: usesLimitedTries(s),
       partialCredit: s.partialCredit !== false,
     },
     questions,

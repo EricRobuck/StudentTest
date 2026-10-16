@@ -82,8 +82,6 @@ export interface QuestionProgress {
   locked: boolean;
   /** Best result so far; null if never submitted or results are hidden until the end. */
   best: { passed: boolean; pointsAwarded: number; partial: boolean } | null;
-  /** Points a correct answer earns on the next submission; null when no more submissions are allowed. */
-  nextTryPoints: number | null;
 }
 
 /** Response body of POST /api/exam/questions/:questionId/submit. */
@@ -150,8 +148,8 @@ export interface StudentExamRules {
   lockAfterSubmit: boolean;
   /** Leaving the test screen locks the test until the instructor unlocks it. */
   lockOnLeave: boolean;
-  /** Three tries per question: 100% / 90% / 60% of the points, then 0. */
-  threeTries: boolean;
+  /** A fixed number of tries per question (TRIES_PER_QUESTION), full points on any of them. */
+  limitedTries: boolean;
   /** Once a question is final, partial credit for the checks that passed. */
   partialCredit: boolean;
 }

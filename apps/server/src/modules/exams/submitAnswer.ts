@@ -1,4 +1,4 @@
-import { tryCredit, type SubmitResult } from '@linuxlab/shared';
+import type { SubmitResult } from '@linuxlab/shared';
 import type { AttemptService, SubmitBlock } from '../attempts/attemptService.js';
 import type { ContainerRuntime } from '../containers/index.js';
 import type { AttemptRecord } from '../db/index.js';
@@ -48,10 +48,7 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
     }
 
     const grade = await gradeQuestion({ runtime: deps.runtime, containerId: session.containerId }, question.validation);
-    // Three-tries rule: a later correct answer earns less (100% / 90% / 60%).
-    const previousTries = before.filter((s) => s.questionId === question.id).length;
-    const credit = tryCredit(exam.settings, previousTries);
-    const pointsAwarded = Math.round(question.points * grade.score * credit * 100) / 100;
+    const pointsAwarded = Math.round(question.points * grade.score * 100) / 100;
     const attemptNumber = await deps.attempts.recordSubmission(attempt, question.id, {
       passed: grade.passed,
       score: grade.score,

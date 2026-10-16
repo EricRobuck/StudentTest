@@ -113,13 +113,8 @@ export function QuestionPanel({
       )}
       {!passed && !missed && progress?.attemptsRemaining !== null && progress?.attemptsRemaining !== undefined && (
         <p className="attempts-left muted">
-          {progress.attemptsRemaining} {progress.attemptsRemaining === 1 ? 'try' : 'tries'} left
-          {progress.nextTryPoints !== null && (
-            <>
-              {' '}
-              · a correct answer now earns <strong>{progress.nextTryPoints}</strong> of {question.points} points
-            </>
-          )}
+          {progress.attemptsRemaining} {progress.attemptsRemaining === 1 ? 'try' : 'tries'} left · a correct answer
+          earns full points on any try
         </p>
       )}
     </div>

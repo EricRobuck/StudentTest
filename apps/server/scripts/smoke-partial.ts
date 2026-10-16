@@ -1,5 +1,5 @@
 // Partial credit: once a question is final and was never fully right, the
-// student gets the share of checks passed × points × that try's value.
+// student gets the share of checks passed (best try) × points.
 //
 //   npm run smoke:partial -- <baseUrl> <instructorPassword>
 
@@ -67,30 +67,32 @@ async function main(): Promise<void> {
     'Try 1 (3/4 checks): still "Not yet", no points shown while tries remain', JSON.stringify(r.feedback));
   r = await submit(qa.id);
   r = await submit(qa.id);
+  report(r.feedback?.pointsAwarded === 0 && !r.feedback?.partial, 'Try 3 (3/4): still "Not yet" while a try remains', JSON.stringify(r.feedback));
+  r = await submit(qa.id);
   report(r.feedback?.partial === true && r.feedback.pointsAwarded === 7.5 && r.score?.earned === 7.5,
-    'Try 3 also 3/4: question closes with partial credit 7.5/10 (best try, at 100%)', JSON.stringify({ f: r.feedback, s: r.score }));
+    'Try 4 also 3/4: question closes with partial credit 7.5/10', JSON.stringify({ f: r.feedback, s: r.score }));
   report(r.progress.best?.partial === true && r.progress.best.pointsAwarded === 7.5, 'Progress shows the partial credit');
 
-  console.log('\n--- Partial credit never beats a later correct answer unfairly ---');
+  console.log('\n--- A later correct answer earns full points ---');
   await run('mkdir -p ~/pb/work && echo done > ~/pb/work/a.txt');
-  r = await submit(qb.id); // 2/4 on try 1 → worth 5 if it ended now
+  r = await submit(qb.id); // 2/4 on try 1
   await run('mkdir -p ~/pb/archive && echo done > ~/pb/archive/b.txt');
-  r = await submit(qb.id); // correct on try 2 → 9
-  report(r.feedback?.passed === true && r.feedback.pointsAwarded === 9 && r.progress.best?.pointsAwarded === 9,
-    'Wrong (2/4) then correct on try 2: 9/10', JSON.stringify(r.progress.best));
+  r = await submit(qb.id); // correct on try 2 → full points
+  report(r.feedback?.passed === true && r.feedback.pointsAwarded === 10 && r.progress.best?.pointsAwarded === 10,
+    'Wrong (2/4) then correct on try 2: full 10/10', JSON.stringify(r.progress.best));
 
   console.log('\n--- Exam ends with tries left ---');
   await run('mkdir -p ~/pc/work');
   r = await submit(qc.id); // 1/4 on try 1
-  report(r.feedback?.pointsAwarded === 0 && r.score?.earned === 16.5, 'While open: 0 for that question (score 7.5 + 9)', JSON.stringify(r.score));
+  report(r.feedback?.pointsAwarded === 0 && r.score?.earned === 17.5, 'While open: 0 for that question (score 7.5 + 10)', JSON.stringify(r.score));
   const fin = (await s.call<ExamResultView>('POST', '/api/attempt/finish')).body;
   const rc = fin.questions.find((x) => x.questionId === qc.id);
-  report(rc?.partial === true && rc.pointsAwarded === 2.5 && fin.score.earned === 19,
-    'After finishing: 1/4 checks = 2.5, total 19/30', JSON.stringify({ rc, score: fin.score }));
+  report(rc?.partial === true && rc.pointsAwarded === 2.5 && fin.score.earned === 20,
+    'After finishing: 1/4 checks = 2.5, total 20/30', JSON.stringify({ rc, score: fin.score }));
 
   const detail = (await teacher.call<AttemptDetail>('GET', `/api/instructor/attempts/${fin.questions.length ? (await s.call<{ id: string }>('GET', '/api/attempt')).body.id : ''}`)).body;
   const da = detail.questions.find((x) => x.questionId === qa.id);
-  report(da?.partial === true && da.pointsAwarded === 7.5 && detail.summary.score.earned === 19, 'Instructor pages show the same partial credit');
+  report(da?.partial === true && da.pointsAwarded === 7.5 && detail.summary.score.earned === 20, 'Instructor pages show the same partial credit');
 
   console.log('\n--- Setting off ---');
   const settings = { ...exam.settings, partialCredit: false };
@@ -103,7 +105,7 @@ async function main(): Promise<void> {
   await t2.waitFor(/student@linux:~\$ $/m);
   t2.type('mkdir -p ~/pa/work ~/pa/archive && echo done > ~/pa/work/a.txt; echo OK1\r');
   await t2.waitFor(/\nOK1\n/);
-  for (let i = 0; i < 3; i++) await s2.call('POST', `/api/exam/questions/${qa.id}/submit`);
+  for (let i = 0; i < 4; i++) await s2.call('POST', `/api/exam/questions/${qa.id}/submit`);
   const fin2 = (await s2.call<ExamResultView>('POST', '/api/attempt/finish')).body;
   report(fin2.score.earned === 0, 'With partial credit off, 3/4 checks earn 0', JSON.stringify(fin2.score));
   term.ws.close();

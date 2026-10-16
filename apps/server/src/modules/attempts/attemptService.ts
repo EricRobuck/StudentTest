@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   effectiveMaxAttempts,
-  tryCredit,
   type AttemptEndReason,
   type AttemptView,
   type ExamResultView,
@@ -166,10 +165,10 @@ export class AttemptService {
   }
 
   /**
-   * The points a student has on one question: their best submission, where a
-   * correct answer is worth the points of that try (100% / 90% / 60%) and,
-   * once the question is final, a wrong answer earns partial credit for the
-   * share of checks it passed (at that try's value). Never lowered by trying again.
+   * The points a student has on one question: full points for a correct
+   * answer on any try; once the question is final (out of tries, or the exam
+   * is over), partial credit for the share of checks passed on their best try.
+   * Never lowered by trying again.
    */
   questionResult(
     exam: ExamDefinition,
@@ -183,7 +182,8 @@ export class AttemptService {
     const final = attempt.status === 'completed' || passed || this.noTriesLeft(exam, mine.length);
     let points = 0;
     for (const s of mine) {
-      const value = s.passed ? s.pointsAwarded : final && question ? partialPoints(exam, question, s) : 0;
+      // Full points for a correct answer (earlier versions stored less for later tries).
+      const value = s.passed ? (question?.points ?? s.maxPoints) * s.score : final && question ? partialPoints(exam, question, s) : 0;
       points = Math.max(points, value);
     }
     points = round2(points);
@@ -202,14 +202,12 @@ export class AttemptService {
     const result = this.questionResult(exam, attempt, questionId, subs);
     const revealed = exam.settings.showFeedback || attempt.status === 'completed';
     const locked = this.submitBlock(exam, attempt, questionId, subs) !== null;
-    const points = exam.questions.find((q) => q.id === questionId)?.points ?? 0;
     return {
       questionId,
       attempts: mine.length,
       attemptsRemaining: max === null ? null : Math.max(0, max - mine.length),
       locked,
       best: result.submitted && revealed ? { passed: result.passed, pointsAwarded: result.points, partial: result.partial } : null,
-      nextTryPoints: locked ? null : round2(points * tryCredit(exam.settings, mine.length)),
     };
   }
 
@@ -281,16 +279,16 @@ export interface QuestionResult {
 }
 
 /**
- * Partial credit for one wrong submission: share of checks passed x points x
- * that try's value. Only for questions where all checks must pass (when any
- * one check is enough, a passing check already means full marks).
+ * Partial credit for one wrong submission: share of checks passed x points.
+ * Only for questions where all checks must pass (when any one check is
+ * enough, a passing check already means full marks).
  */
 function partialPoints(exam: ExamDefinition, question: ExamDefinition['questions'][number], s: SubmissionRecord): number {
   if (exam.settings.partialCredit === false || question.validation.mode !== 'all') return 0;
   const rules = Array.isArray(s.ruleResults) ? (s.ruleResults as Array<{ passed?: unknown }>) : [];
   if (rules.length === 0) return 0;
   const share = rules.filter((r) => r.passed === true).length / rules.length;
-  return question.points * share * tryCredit(exam.settings, s.attemptNumber - 1);
+  return question.points * share;
 }
 
 function isOverdue(a: AttemptRecord): boolean {
