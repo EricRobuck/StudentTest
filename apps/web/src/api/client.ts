@@ -9,10 +9,12 @@ import type {
   GenerateQuestionsResponse,
   InstructorQuestion,
   QuestionContent,
+  QuestionProgress,
   AttemptSummary,
   AttemptView,
   StartOptionsResponse,
   ExamResultView,
+  ExamType,
   HealthResponse,
   InstructorStatus,
   SessionResponse,
@@ -99,6 +101,10 @@ export const api = {
   submit: (questionId: string) =>
     request<SubmitResult>('POST', `/api/exam/questions/${encodeURIComponent(questionId)}/submit`),
 
+  /** Written tests: saves the answer to a question (empty clears it). */
+  saveAnswer: (questionId: string, answer: string) =>
+    request<QuestionProgress>('PUT', `/api/exam/questions/${encodeURIComponent(questionId)}/answer`, { body: { answer } }),
+
   finish: () => request<ExamResultView>('POST', '/api/attempt/finish'),
 
   /** Tells the server the student left the test screen; the server locks the test. */
@@ -119,6 +125,11 @@ export const instructorApi = {
   attempts: (signal?: AbortSignal) => request<AttemptSummary[]>('GET', '/api/instructor/attempts', { signal }),
   attempt: (id: string, signal?: AbortSignal) =>
     request<AttemptDetail>('GET', `/api/instructor/attempts/${encodeURIComponent(id)}`, { signal }),
+  /** Marks a question correct (true) or not correct (false); null goes back to the automatic grade. */
+  setGrade: (attemptId: string, questionId: string, correct: boolean | null) =>
+    request<void>('PUT', `/api/instructor/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/grade`, {
+      body: { correct },
+    }),
   deleteAttempt: (id: string) => request<void>('DELETE', `/api/instructor/attempts/${encodeURIComponent(id)}`),
   unlock: (id: string) => request<void>('POST', `/api/instructor/attempts/${encodeURIComponent(id)}/unlock`),
 
@@ -126,7 +137,8 @@ export const instructorApi = {
   aiStatus: (signal?: AbortSignal) => request<AiStatus>('GET', '/api/instructor/ai', { signal }),
   exams: (signal?: AbortSignal) => request<ExamSummary[]>('GET', '/api/instructor/exams', { signal }),
   exam: (id: string, signal?: AbortSignal) => request<ExamDetail>('GET', examPath(id), { signal }),
-  createExam: (title: string) => request<ExamDetail>('POST', '/api/instructor/exams', { body: { title } }),
+  createExam: (title: string, examType: ExamType) =>
+    request<ExamDetail>('POST', '/api/instructor/exams', { body: { title, examType } }),
   updateExam: (id: string, body: { title: string; description: string; settings: ExamSettings }) =>
     request<ExamDetail>('PUT', examPath(id), { body }),
   deleteExam: (id: string) => request<void>('DELETE', examPath(id)),

@@ -46,6 +46,7 @@ export function sessionRouter(sessions: SessionManager, attempts: AttemptService
         timeLimitMinutes: e.settings.timeLimitMinutes,
         mode: e.settings.mode,
         lockOnLeave: e.settings.lockOnLeave !== false,
+        examType: e.settings.examType === 'written' ? 'written' : 'linux',
       })),
     };
     res.json(body);

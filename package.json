@@ -25,6 +25,7 @@
     "smoke:lock": "npm run smoke:lock -w @linuxlab/server --",
     "smoke:tries": "npm run smoke:tries -w @linuxlab/server --",
     "smoke:partial": "npm run smoke:partial -w @linuxlab/server --",
+    "smoke:written": "npm run smoke:written -w @linuxlab/server --",
     "smoke:authoring": "npm run smoke:authoring -w @linuxlab/server --",
     "commands:show": "npm run commands:show -w @linuxlab/server --",
     "ai:try": "npm run ai:try -w @linuxlab/server --",

@@ -10,6 +10,7 @@ import type { InstructorAuth } from '../modules/instructor/instructorAuth.js';
 import type { InstructorService } from '../modules/instructor/instructorService.js';
 
 const ATTEMPT_ID = /^[0-9a-f-]{36}$/;
+const QUESTION_ID = /^[A-Za-z0-9_-]{1,100}$/;
 
 export function instructorRouter(
   auth: InstructorAuth,
@@ -87,6 +88,25 @@ export function instructorRouter(
     if (!ATTEMPT_ID.test(attemptId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid attempt id');
     try {
       await attempts.unlock(attemptId);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PUT /api/instructor/attempts/:attemptId/questions/:questionId/grade { correct } — mark a
+  // question of a finished attempt correct (true) or not (false); null = automatic grade.
+  router.put('/instructor/attempts/:attemptId/questions/:questionId/grade', sameOrigin, instructorOnly, async (req, res, next) => {
+    const attemptId = String(req.params.attemptId);
+    const questionId = String(req.params.questionId);
+    const correct: unknown = (req.body as { correct?: unknown } | undefined)?.correct;
+    if (!ATTEMPT_ID.test(attemptId) || !QUESTION_ID.test(questionId) || (typeof correct !== 'boolean' && correct !== null)) {
+      return sendError(res, 400, 'BAD_REQUEST', 'correct must be true, false or null');
+    }
+    try {
+      const outcome = await attempts.setGradeOverride(attemptId, questionId, correct);
+      if (outcome === 'not-found') return sendError(res, 404, 'NOT_FOUND', 'Attempt or question not found');
+      if (outcome === 'in-progress') return sendError(res, 409, 'IN_PROGRESS', 'Grades can be changed after the student finishes.');
       res.status(204).end();
     } catch (err) {
       next(err);

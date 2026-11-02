@@ -37,7 +37,8 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
     const exam = attempt && deps.examFor(attempt);
     if (!attempt || !exam) return { kind: 'blocked', reason: 'completed' };
     const question = exam.questions.find((q) => q.id === questionId);
-    if (!question) return { kind: 'unknown-question' };
+    // Written questions have no Linux environment to grade: see saveWrittenAnswer.
+    if (!question || question.answer) return { kind: 'unknown-question' };
 
     const before = await deps.attempts.submissions(attempt.id);
     const block = deps.attempts.submitBlock(exam, attempt, questionId, before);
@@ -62,7 +63,7 @@ export async function submitAnswer(deps: SubmitDeps, session: ExamSession, quest
         grade.rules.map((r) => `[${r.type} ${r.passed ? 'ok' : 'x'} ${JSON.stringify(r.detail ?? '')}]`).join(' '),
     );
 
-    const after = await deps.attempts.submissions(attempt.id);
+    const after = await deps.attempts.work(attempt.id);
     const view = await deps.attempts.view(exam, attempt);
     const questionNow = deps.attempts.questionResult(exam, attempt, question.id, after);
     const result: SubmitResult = {

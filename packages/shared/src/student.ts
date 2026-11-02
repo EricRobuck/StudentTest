@@ -26,6 +26,7 @@ export interface OpenExam {
   mode: 'practice' | 'exam';
   /** The test locks if the student leaves the test screen. */
   lockOnLeave: boolean;
+  examType: 'linux' | 'written';
 }
 
 /** Response body of GET /api/start-options. */

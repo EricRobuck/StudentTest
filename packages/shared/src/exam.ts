@@ -8,6 +8,28 @@
 
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced';
 export type ExamMode = 'practice' | 'exam';
+/** Chosen when a test is created: a Linux terminal lab, or answers typed/picked on screen. */
+export type ExamType = 'linux' | 'written';
+
+/** The correct answer of a written question. Never sent to students. */
+export type AnswerKey =
+  | { type: 'multiple_choice'; choices: string[]; correctIndex: number }
+  | { type: 'fill_in_blank'; accepted: string[] };
+
+/** What a student sees of a written question's answer: no correct answer in it. */
+export type StudentAnswerFormat = { type: 'multiple_choice'; choices: string[] } | { type: 'fill_in_blank' };
+
+/** Ignores capitals, surrounding spaces and repeated spaces. */
+function normalizeAnswer(text: string): string {
+  return text.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** Grades a written answer. Multiple choice answers are the choice's index, as text. */
+export function isAnswerCorrect(key: AnswerKey, answer: string): boolean {
+  if (key.type === 'multiple_choice') return answer === String(key.correctIndex);
+  const given = normalizeAnswer(answer);
+  return given.length > 0 && key.accepted.some((a) => normalizeAnswer(a) === given);
+}
 
 /** One state check run inside the student's container after they submit. */
 export type ValidatorSpec =
@@ -43,6 +65,8 @@ export interface StudentQuestion {
   difficulty: Difficulty;
   /** Only present when the exam allows hints. */
   hint?: string;
+  /** Written tests only: how the student answers. */
+  answerFormat?: StudentAnswerFormat;
 }
 
 /** Outcome of one validation rule, as shown to the student. */
@@ -111,6 +135,8 @@ export interface AttemptView {
   locked: { at: string; reason: string } | null;
   score: ScoreView | null;
   questions: QuestionProgress[];
+  /** Written tests only: the student's saved answers, by question id. */
+  answers?: Record<string, string>;
 }
 
 /** Response body of GET /api/attempt/result (after completion). */
@@ -158,6 +184,7 @@ export interface StudentExamRules {
 export interface StudentExam {
   id: string;
   title: string;
+  examType: ExamType;
   mode: ExamMode;
   totalPoints: number;
   rules: StudentExamRules;

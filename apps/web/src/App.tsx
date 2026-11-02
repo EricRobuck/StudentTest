@@ -11,6 +11,7 @@ import { StartScreen } from './components/StartScreen';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useExamSession } from './hooks/useExamSession';
 import { useLeaveDetection, withLeaveDetectionPaused } from './hooks/useLeaveDetection';
+import { WrittenExam } from './components/WrittenExam';
 import { TerminalView } from './terminal/TerminalView';
 import { createWebSocketTransport } from './terminal/webSocketTransport';
 
@@ -87,6 +88,16 @@ export function App() {
       ) : state.kind === 'in_progress' && state.attempt.locked ? (
         <main className="exam-body exam-body-single">
           <LockedScreen studentName={state.student.name} pendingLeave={pendingLeave} onChanged={onLockChanged} />
+        </main>
+      ) : state.kind === 'in_progress' && state.exam.examType === 'written' ? (
+        <main className="exam-body">
+          <WrittenExam
+            exam={state.exam}
+            attempt={state.attempt}
+            updateAttempt={updateAttempt}
+            onFinished={showResult}
+            onExamOver={reload}
+          />
         </main>
       ) : state.kind === 'completed' ? (
         <main className="exam-body exam-body-single">

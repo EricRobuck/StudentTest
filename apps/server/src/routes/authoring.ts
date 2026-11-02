@@ -38,7 +38,7 @@ export function authoringRouter(auth: InstructorAuth, authoring: AuthoringServic
   router.post('/instructor/exams/:examId/generate', ...write, handle((req) => authoring.generate(p(req, 'examId'), req.body)));
 
   router.get('/instructor/exams', instructorOnly, handle(() => authoring.listExams()));
-  router.post('/instructor/exams', ...write, handle((req) => authoring.createExam((req.body as { title?: unknown })?.title), 201));
+  router.post('/instructor/exams', ...write, handle((req) => authoring.createExam((req.body as { title?: unknown })?.title, (req.body as { examType?: unknown })?.examType), 201));
   router.get('/instructor/exams/:examId', instructorOnly, handle((req) => authoring.examDetail(p(req, 'examId'))));
   router.put('/instructor/exams/:examId', ...write, handle((req) => authoring.updateExam(p(req, 'examId'), req.body)));
   router.delete('/instructor/exams/:examId', ...write, handle((req) => authoring.deleteExam(p(req, 'examId')), 204));

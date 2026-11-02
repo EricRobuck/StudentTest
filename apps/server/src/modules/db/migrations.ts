@@ -188,4 +188,27 @@ export const migrations: Migration[] = [
       CREATE INDEX integrity_events_attempt ON integrity_events(attempt_id, at);
     `,
   },
+  {
+    version: 8,
+    name: 'written tests and instructor grade changes',
+    sql: `
+      -- The student's current answer to each written question.
+      CREATE TABLE written_answers (
+        attempt_id  TEXT NOT NULL REFERENCES exam_attempts(id),
+        question_id TEXT NOT NULL,
+        answer      TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        PRIMARY KEY (attempt_id, question_id)
+      );
+
+      -- Questions the instructor marked correct or not correct by hand.
+      CREATE TABLE grade_overrides (
+        attempt_id  TEXT NOT NULL REFERENCES exam_attempts(id),
+        question_id TEXT NOT NULL,
+        correct     INTEGER NOT NULL CHECK (correct IN (0, 1)),
+        at          TEXT NOT NULL,
+        PRIMARY KEY (attempt_id, question_id)
+      );
+    `,
+  },
 ];

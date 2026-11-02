@@ -14,6 +14,21 @@ export const practiceSettings: ExamSettings = {
   allowSudo: false,
 };
 
+/** A new written test: one attempt, results only when it is over. */
+export const writtenSettings: ExamSettings = {
+  mode: 'exam',
+  allowHints: false,
+  timeLimitMinutes: 45,
+  maxAttemptsPerQuestion: null,
+  showFeedback: false,
+  showScoreDuringExam: false,
+  lockAfterSubmit: false,
+  allowSudo: false,
+  limitedTries: false,
+  partialCredit: false,
+  examType: 'written',
+};
+
 /** Strict settings for trying exam mode: SAMPLE_EXAM_MODE=exam. */
 export const examModeSettings: ExamSettings = {
   mode: 'exam',

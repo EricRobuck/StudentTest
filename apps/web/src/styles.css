@@ -1002,3 +1002,60 @@ ul.plain {
 .partial {
   color: var(--warn);
 }
+
+/* Written tests: the answer area takes the place of the terminal */
+.answer-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.answer-choices {
+  border: 0;
+  padding: 0;
+  margin: 0.75rem 0;
+}
+
+.answer-blank {
+  display: block;
+  margin: 0.75rem 0;
+}
+
+.answer-blank input {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.6rem;
+  font-size: 1.05rem;
+}
+
+.answer-summary {
+  margin-top: 1rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.answer-key {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.grade-control {
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+.test-stats {
+  margin-bottom: 1rem;
+}

@@ -1,12 +1,13 @@
-import type {
-  AttemptDetail,
-  AttemptSummary,
-  FsSnapshotView,
-  InstructorCommand,
-  InstructorRuleResult,
+import {
+  isWrittenExam,
+  type AttemptDetail,
+  type AttemptSummary,
+  type FsSnapshotView,
+  type InstructorCommand,
+  type InstructorRuleResult,
 } from '@linuxlab/shared';
-import type { AttemptService } from '../attempts/attemptService.js';
-import type { AttemptRecord, CommandLogRecord, IntegrityEventRecord, Repositories, SubmissionRecord } from '../db/index.js';
+import type { AttemptService, AttemptWork } from '../attempts/attemptService.js';
+import type { AttemptRecord, CommandLogRecord, IntegrityEventRecord, Repositories } from '../db/index.js';
 import { orderedQuestions } from '../exams/examService.js';
 import type { ExamDefinition } from '../exams/types.js';
 
@@ -24,12 +25,12 @@ export class InstructorService {
     for (const attempt of await this.repos.attempts.listAll()) {
       const exam = this.examFor(attempt);
       if (!exam) continue;
-      const [subs, commands, events] = await Promise.all([
-        this.repos.submissions.listForAttempt(attempt.id),
+      const [work, commands, events] = await Promise.all([
+        this.attempts.work(attempt.id),
         this.repos.commands.listForAttempt(attempt.id),
         this.repos.attempts.integrityEvents(attempt.id),
       ]);
-      summaries.push(this.summary(exam, attempt, subs, commands, events));
+      summaries.push(this.summary(exam, attempt, work, commands, events));
     }
     return summaries;
   }
@@ -39,8 +40,8 @@ export class InstructorService {
     const exam = attempt && this.examFor(attempt);
     if (!attempt || !exam) return undefined;
 
-    const [subs, commands, visits, snapshots, events] = await Promise.all([
-      this.repos.submissions.listForAttempt(attempt.id),
+    const [work, commands, visits, snapshots, events] = await Promise.all([
+      this.attempts.work(attempt.id),
       this.repos.commands.listForAttempt(attempt.id),
       this.repos.attempts.visits(attempt.id),
       this.repos.snapshots.forAttempt(attempt.id),
@@ -50,8 +51,9 @@ export class InstructorService {
     const questionIds = new Set(exam.questions.map((q) => q.id));
 
     const questions = orderedQuestions(exam).map((q, i) => {
-      const mine = subs.filter((s) => s.questionId === q.id);
-      const result = this.attempts.questionResult(exam, attempt, q.id, subs);
+      const mine = work.submissions.filter((s) => s.questionId === q.id);
+      const result = this.attempts.questionResult(exam, attempt, q.id, work);
+      const automatic = this.attempts.questionResult(exam, attempt, q.id, { ...work, overrides: new Map() });
       return {
         questionId: q.id,
         number: i + 1,
@@ -61,6 +63,10 @@ export class InstructorService {
         pointsAwarded: result.points,
         passed: result.passed,
         partial: result.partial,
+        autoPassed: automatic.passed,
+        override: work.overrides.get(q.id) ?? null,
+        answerKey: q.answer ?? null,
+        studentAnswer: work.answers.get(q.id) ?? null,
         validation: q.validation,
         timeSpentSeconds: Math.round((timeSpent.get(q.id) ?? 0) / 1000),
         submissions: mine.map((s) => ({
@@ -77,7 +83,7 @@ export class InstructorService {
 
     const latest = snapshots.at(-1);
     return {
-      summary: this.summary(exam, attempt, subs, commands, events),
+      summary: this.summary(exam, attempt, work, commands, events),
       questions,
       unassignedCommands: commands.filter((c) => !c.questionId || !questionIds.has(c.questionId)).map(toCommand),
       integrityEvents: events,
@@ -88,11 +94,11 @@ export class InstructorService {
   private summary(
     exam: ExamDefinition,
     attempt: AttemptRecord,
-    subs: SubmissionRecord[],
+    work: AttemptWork,
     commands: CommandLogRecord[],
     events: IntegrityEventRecord[],
   ): AttemptSummary {
-    const score = this.attempts.score(exam, attempt, subs);
+    const score = this.attempts.score(exam, attempt, work);
     return {
       id: attempt.id,
       examId: exam.id,
@@ -105,12 +111,13 @@ export class InstructorService {
       completedAt: attempt.completedAt,
       score,
       percentage: score.max === 0 ? 0 : Math.round((score.earned / score.max) * 1000) / 10,
-      submissionCount: subs.length,
+      submissionCount: work.submissions.length + work.answers.size,
       commandCount: commands.length,
       flaggedCommandCount: commands.filter((c) => c.flags.length > 0).length,
       lockedAt: attempt.lockedAt,
       lockReason: attempt.lockReason,
       timesLeft: events.filter((e) => e.type === 'left').length,
+      examType: isWrittenExam(exam.settings) ? 'written' : 'linux',
     };
   }
 }

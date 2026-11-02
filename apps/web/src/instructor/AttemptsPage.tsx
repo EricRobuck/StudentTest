@@ -30,17 +30,19 @@ export function AttemptsPage({ onOpen }: { onOpen: (attemptId: string) => void }
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
 
+  const [examFilter, setExamFilter] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [search, setSearch] = useState('');
 
   if (error) return <p className="error-text">{error}</p>;
   if (!attempts) return <p className="muted">Loading attempts…</p>;
 
+  const examTitles = [...new Set(attempts.map((a) => a.examTitle))].sort();
   const classNames = [...new Set(attempts.map((a) => a.className).filter((c): c is string => !!c))].sort();
   const needle = search.trim().toLowerCase();
   const shown = attempts
     .filter(
-      (a) => (!classFilter || a.className === classFilter) && (!needle || (a.studentName ?? '').toLowerCase().includes(needle)),
+      (a) => (!examFilter || a.examTitle === examFilter) && (!classFilter || a.className === classFilter) && (!needle || (a.studentName ?? '').toLowerCase().includes(needle)),
     )
     // Students waiting for an unlock go first.
     .sort((a, b) => Number(isLocked(b)) - Number(isLocked(a)));
@@ -85,7 +87,19 @@ export function AttemptsPage({ onOpen }: { onOpen: (attemptId: string) => void }
           for leaving the test screen. Go to the student, then click <em>Unlock</em> to let them continue.
         </p>
       )}
+      <TestStats attempts={attempts.filter((a) => (!examFilter || a.examTitle === examFilter) && (!classFilter || a.className === classFilter))} />
       <div className="filters">
+        <label>
+          Test{' '}
+          <select value={examFilter} onChange={(e) => setExamFilter(e.target.value)}>
+            <option value="">All tests</option>
+            {examTitles.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Class{' '}
           <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
@@ -199,6 +213,61 @@ export function StudentLabel({ summary }: { summary: AttemptSummary }) {
     <span>{summary.studentName}</span>
   ) : (
     <span className="mono muted">#{summary.id.slice(0, 8)}</span>
+  );
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** Mean, high and low of each test, from the attempts that are finished. */
+function TestStats({ attempts }: { attempts: AttemptSummary[] }) {
+  const titles = [...new Set(attempts.map((a) => a.examTitle))];
+  const rows = titles
+    .map((title) => {
+      const mine = attempts.filter((a) => a.examTitle === title);
+      const done = mine.filter((a) => a.status === 'completed');
+      const scores = done.map((a) => a.percentage);
+      return {
+        title,
+        finished: done.length,
+        stillTaking: mine.length - done.length,
+        mean: scores.length ? round1(scores.reduce((sum, s) => sum + s, 0) / scores.length) : 0,
+        high: scores.length ? Math.max(...scores) : 0,
+        low: scores.length ? Math.min(...scores) : 0,
+      };
+    })
+    .filter((r) => r.finished > 0);
+  if (rows.length === 0) return null;
+  return (
+    <div className="panel test-stats">
+      <h3>Test results</h3>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Test</th>
+            <th scope="col" className="num">Finished</th>
+            <th scope="col" className="num">Mean</th>
+            <th scope="col" className="num">High</th>
+            <th scope="col" className="num">Low</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.title}>
+              <td>{r.title}</td>
+              <td className="num">
+                {r.finished}
+                {r.stillTaking > 0 && <span className="muted small"> ({r.stillTaking} still taking it)</span>}
+              </td>
+              <td className="num">{r.mean}%</td>
+              <td className="num">{r.high}%</td>
+              <td className="num">{r.low}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

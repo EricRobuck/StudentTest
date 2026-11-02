@@ -1,4 +1,4 @@
-import { effectiveMaxAttempts, usesLimitedTries, type StudentExam, type StudentQuestion } from '@linuxlab/shared';
+import { effectiveMaxAttempts, isWrittenExam, usesLimitedTries, type StudentAnswerFormat, type StudentExam, type StudentQuestion } from '@linuxlab/shared';
 import type { AttemptRecord } from '../db/index.js';
 import type { ExamCatalog } from './examCatalog.js';
 import type { ExamDefinition, QuestionDefinition } from './types.js';
@@ -50,6 +50,12 @@ export function orderedQuestions(exam: ExamDefinition): QuestionDefinition[] {
  * The only way exam data reaches a student. Builds the view field by field
  * (an allow-list), so answers, setup, and model solutions can never leak.
  */
+/** Only the choices: which one is correct stays on the server. */
+function studentAnswerFormat(q: QuestionDefinition): StudentAnswerFormat | undefined {
+  if (!q.answer) return undefined;
+  return q.answer.type === 'multiple_choice' ? { type: 'multiple_choice', choices: q.answer.choices } : { type: 'fill_in_blank' };
+}
+
 export function toStudentExam(exam: ExamDefinition): StudentExam {
   const questions: StudentQuestion[] = orderedQuestions(exam).map((q, index) => ({
     id: q.id,
@@ -61,11 +67,13 @@ export function toStudentExam(exam: ExamDefinition): StudentExam {
     category: q.category,
     difficulty: q.difficulty,
     hint: exam.settings.allowHints ? q.hint : undefined,
+    answerFormat: studentAnswerFormat(q),
   }));
   const s = exam.settings;
   return {
     id: exam.id,
     title: exam.title,
+    examType: isWrittenExam(s) ? 'written' : 'linux',
     mode: s.mode,
     totalPoints: questions.reduce((sum, q) => sum + q.points, 0),
     rules: {

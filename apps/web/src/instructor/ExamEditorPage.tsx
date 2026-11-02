@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AUTHORING_LIMITS, TRIES_PER_QUESTION, usesLimitedTries } from '@linuxlab/shared';
+import { AUTHORING_LIMITS, isWrittenExam, TRIES_PER_QUESTION, usesLimitedTries } from '@linuxlab/shared';
 import type {
   AiStatus,
+  AnswerKey,
   Difficulty,
   ExamDetail,
   ExamSettings,
@@ -15,6 +16,7 @@ import { TaskText } from '../components/TaskText';
 import { OpenBadge } from './ExamsPage';
 import { printable } from './format';
 import { EMPTY_QUESTION, QuestionForm } from './QuestionForm';
+import { EMPTY_WRITTEN_QUESTION, WrittenQuestionForm } from './WrittenQuestionForm';
 
 export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () => void }) {
   const [exam, setExam] = useState<ExamDetail | null>(null);
@@ -86,6 +88,9 @@ export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () 
     void act(() => instructorApi.reorder(exam.id, ids));
   };
 
+  const written = isWrittenExam(exam.settings);
+  const Form = written ? WrittenQuestionForm : QuestionForm;
+
   return (
     <article className="exam-editor">
       <button type="button" className="link-button" onClick={onBack}>
@@ -94,7 +99,9 @@ export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () 
 
       <section className="panel">
         <div className="section-head">
-          <h2>{exam.title}</h2>
+          <h2>
+            {exam.title} <span className="muted small">· {written ? 'Written test' : 'Linux lab'}</span>
+          </h2>
           <span className="action-row">
             <OpenBadge exam={exam} />
             {exam.enabled ? (
@@ -134,7 +141,7 @@ export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () 
         <SettingsEditor exam={exam} onSave={(body) => act(() => instructorApi.updateExam(exam.id, body))} />
       </section>
 
-      <GeneratePanel examId={exam.id} ai={ai} onDone={load} />
+      <GeneratePanel examId={exam.id} ai={ai} written={written} onDone={load} />
 
       <section>
         <div className="section-head">
@@ -147,8 +154,8 @@ export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () 
         </div>
         {editing === 'new' && (
           <div className="panel">
-            <QuestionForm
-              initial={EMPTY_QUESTION}
+            <Form
+              initial={written ? EMPTY_WRITTEN_QUESTION : EMPTY_QUESTION}
               submitLabel="Add question"
               onCancel={() => setEditing(null)}
               onSubmit={async (content) => {
@@ -163,9 +170,9 @@ export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () 
         {exam.questions.map((q, i) =>
           editing === q.id ? (
             <div key={q.id} className="panel">
-              <QuestionForm
+              <Form
                 initial={q.content}
-                submitLabel="Save changes (the question goes back to draft and is re-tested)"
+                submitLabel={written ? 'Save changes (the question goes back to draft)' : 'Save changes (the question goes back to draft and is re-tested)'}
                 onCancel={() => setEditing(null)}
                 onSubmit={async (content) => {
                   await instructorApi.updateQuestion(exam.id, q.id, content);
@@ -221,7 +228,7 @@ function QuestionCard(props: {
         <span className="action-row">
           {q.status === 'approved' ? <span className="badge badge-done">Approved</span> : <span className="badge">Draft</span>}
           {q.source === 'ai' && <span className="badge badge-live">AI</span>}
-          <TestBadge status={v.status} />
+          {!c.answer && <TestBadge status={v.status} />}
         </span>
       </div>
       <p>
@@ -232,6 +239,8 @@ function QuestionCard(props: {
           <TaskText text={c.instructions} />
         </p>
       )}
+      {c.answer && <AnswerKeyView answer={c.answer} />}
+      {!c.answer && (
       <details>
         <summary>How it's graded, setup, model answer{v.notes.length ? ', test notes' : ''}</summary>
         <dl className="facts small">
@@ -285,6 +294,7 @@ function QuestionCard(props: {
           )}
         </dl>
       </details>
+      )}
       <div className="action-row">
         {q.status === 'draft' ? (
           <button
@@ -303,9 +313,11 @@ function QuestionCard(props: {
         <button type="button" className="secondary" onClick={props.onEdit}>
           Edit
         </button>
-        <button type="button" className="secondary" onClick={props.onRetest} disabled={v.status === 'running'}>
-          Test again
-        </button>
+        {!c.answer && (
+          <button type="button" className="secondary" onClick={props.onRetest} disabled={v.status === 'running'}>
+            Test again
+          </button>
+        )}
         <button type="button" className="secondary" onClick={() => props.onMove(-1)} disabled={props.isFirst} aria-label="Move up">
           ↑
         </button>
@@ -317,6 +329,26 @@ function QuestionCard(props: {
         </button>
       </div>
     </div>
+  );
+}
+
+/** The correct answer of a written question, for the instructor. */
+export function AnswerKeyView({ answer }: { answer: AnswerKey }) {
+  if (answer.type === 'fill_in_blank') {
+    return (
+      <p className="small">
+        <strong>Fill in the blank.</strong> Accepted: {answer.accepted.join(' · ')}
+      </p>
+    );
+  }
+  return (
+    <ol className="answer-key" type="A">
+      {answer.choices.map((choice, i) => (
+        <li key={i} className={i === answer.correctIndex ? 'pass' : undefined}>
+          <TaskText text={choice} /> {i === answer.correctIndex && <strong>✓ correct</strong>}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -333,7 +365,7 @@ function TestBadge({ status }: { status: InstructorQuestion['verification']['sta
   }
 }
 
-function GeneratePanel({ examId, ai, onDone }: { examId: string; ai: AiStatus | null; onDone: () => Promise<void> }) {
+function GeneratePanel({ examId, ai, written, onDone }: { examId: string; ai: AiStatus | null; written: boolean; onDone: () => Promise<void> }) {
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
   const [count, setCount] = useState(5);
@@ -375,8 +407,9 @@ function GeneratePanel({ examId, ai, onDone }: { examId: string; ai: AiStatus | 
     <section className="panel ai-panel">
       <h3>Write questions with AI</h3>
       <p className="muted small">
-        AI drafts the questions, the platform test-runs each one in a sandbox, and nothing reaches students until you
-        approve it.
+        {written
+          ? 'AI drafts a mix of multiple choice and fill-in-the-blank questions on any subject. Nothing reaches students until you approve it.'
+          : 'AI drafts the questions, the platform test-runs each one in a sandbox, and nothing reaches students until you approve it.'}
       </p>
       <form onSubmit={(e) => void submit(e)}>
         <label>
@@ -384,7 +417,7 @@ function GeneratePanel({ examId, ai, onDone }: { examId: string; ai: AiStatus | 
           <textarea
             rows={2}
             maxLength={500}
-            placeholder="e.g. file permissions with chmod, including numeric modes and making a script executable"
+            placeholder={written ? 'e.g. the parts of a computer and what each one does' : 'e.g. file permissions with chmod, including numeric modes and making a script executable'}
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
           />
@@ -411,7 +444,7 @@ function GeneratePanel({ examId, ai, onDone }: { examId: string; ai: AiStatus | 
           Anything else? (optional)
           <input
             maxLength={1000}
-            placeholder="e.g. use a folder called /home/student/webapp; include one question with grep"
+            placeholder={written ? 'e.g. only multiple choice; base it on chapter 3' : 'e.g. use a folder called /home/student/webapp; include one question with grep'}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -423,8 +456,8 @@ function GeneratePanel({ examId, ai, onDone }: { examId: string; ai: AiStatus | 
       {error && <p className="result result-error">{error}</p>}
       {result && (
         <div className="result result-recorded">
-          Added {result.created.length} draft question(s). They are being tested in a sandbox now; approve the ones you
-          like.
+          Added {result.created.length} draft question(s).{' '}
+          {written ? 'Approve the ones you like.' : 'They are being tested in a sandbox now; approve the ones you like.'}
           {result.rejected.length > 0 && (
             <>
               {' '}
@@ -459,6 +492,7 @@ function SettingsEditor({
     <input type="checkbox" checked={s[key] === true} onChange={(e) => setS({ ...s, [key]: e.target.checked })} />
   );
   const numberOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
+  const written = isWrittenExam(exam.settings);
 
   return (
     <details className="settings">
@@ -490,6 +524,7 @@ function SettingsEditor({
               onChange={(e) => setS({ ...s, timeLimitMinutes: numberOrNull(e.target.value) })}
             />
           </label>
+          {!written && (
           <label>
             Attempts per question (empty = unlimited)
             <input
@@ -501,6 +536,7 @@ function SettingsEditor({
               onChange={(e) => setS({ ...s, maxAttemptsPerQuestion: numberOrNull(e.target.value) })}
             />
           </label>
+          )}
         </div>
         <label>
           Description (optional)
@@ -508,10 +544,21 @@ function SettingsEditor({
         </label>
         <div className="checkbox-row">
           <label>{flag('allowHints')} Show hints</label>
-          <label>{flag('showFeedback')} Show right/wrong after each submit</label>
-          <label>{flag('showScoreDuringExam')} Show score during the exam</label>
-          <label>{flag('lockAfterSubmit')} One submission per question</label>
+          {!written && (
+            <>
+              <label>{flag('showFeedback')} Show right/wrong after each submit</label>
+              <label>{flag('showScoreDuringExam')} Show score during the exam</label>
+              <label>{flag('lockAfterSubmit')} One submission per question</label>
+            </>
+          )}
         </div>
+        {written && (
+          <p className="muted small">
+            Students can change their answers until they finish. They see their results when the test is over, and you can
+            change any question's grade from Student attempts.
+          </p>
+        )}
+        {!written && (
         <div className="sudo-setting">
           <label>
             <input
@@ -533,6 +580,8 @@ function SettingsEditor({
             answers the question closes.
           </p>
         </div>
+        )}
+        {!written && (
         <div className="sudo-setting">
           <label>
             <input
@@ -548,6 +597,7 @@ function SettingsEditor({
             While tries remain, students only see "Not yet".
           </p>
         </div>
+        )}
         <div className="sudo-setting">
           <label>
             <input
@@ -562,6 +612,7 @@ function SettingsEditor({
             locks the test. The student must call you over, and you unlock it from Student attempts.
           </p>
         </div>
+        {!written && (
         <div className="sudo-setting">
           <label>
             {flag('allowSudo')} Students can use <code>sudo</code> (admin exercises)
@@ -572,6 +623,7 @@ function SettingsEditor({
             exams that teach admin skills. Changing this re-tests every question in the exam.
           </p>
         </div>
+        )}
         <button type="submit">Save settings</button>
         {saved && <span className="muted"> Saved. New attempts use these settings.</span>}
       </form>

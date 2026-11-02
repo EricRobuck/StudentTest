@@ -2,7 +2,7 @@
 // by the instructor editor, the server, and to vet AI-generated drafts), and
 // the instructor-only views of exams.
 
-import type { Difficulty, ExamMode, SetupStep, ValidationSpec, ValidatorSpec } from './exam.js';
+import type { AnswerKey, Difficulty, ExamMode, ExamType, SetupStep, ValidationSpec, ValidatorSpec } from './exam.js';
 
 export interface ExamSettings {
   mode: ExamMode;
@@ -39,6 +39,12 @@ export interface ExamSettings {
    * they passed on their best try. Missing = true.
    */
   partialCredit?: boolean;
+  /** Fixed when the test is created. Missing = 'linux'. */
+  examType?: ExamType;
+}
+
+export function isWrittenExam(s: Pick<ExamSettings, 'examType'>): boolean {
+  return s.examType === 'written';
 }
 
 /** Submissions allowed per question under the limited-tries rule. */
@@ -80,6 +86,11 @@ export interface QuestionContent {
    * to students.
    */
   solution: string[];
+  /**
+   * Written tests only: the correct answer. Such questions have no setup,
+   * checks or model answer, and no Linux environment is involved.
+   */
+  answer?: AnswerKey;
 }
 
 export type QuestionStatus = 'draft' | 'approved';
@@ -164,6 +175,11 @@ export const AUTHORING_LIMITS = {
   solutionCommandsMax: 20,
   solutionCommandMax: 500,
   generateCountMax: 30,
+  choicesMin: 2,
+  choicesMax: 10,
+  choiceMax: 500,
+  acceptedAnswersMax: 20,
+  answerMax: 500,
   topicMax: 500,
   notesMax: 1000,
 } as const;
@@ -214,6 +230,29 @@ export function validateQuestionContent(input: unknown): ContentCheck {
     errors.push(`Points must be a whole number from 1 to ${L.pointsMax}.`);
   }
   if (!DIFFICULTIES.includes(difficulty)) errors.push('Difficulty must be beginner, intermediate or advanced.');
+
+  // Written question: only the answer key is left to check.
+  if (raw.answer !== undefined && raw.answer !== null) {
+    const answer = validateAnswerKey(asObject(raw.answer), errors);
+    if (errors.length > 0 || !answer) return { ok: false, errors };
+    return {
+      ok: true,
+      value: {
+        title,
+        text,
+        ...(instructions ? { instructions } : {}),
+        points: points as number,
+        category,
+        difficulty,
+        setup: [],
+        validation: { mode: 'all', rules: [] },
+        ...(hint ? { hint } : {}),
+        ...(explanation ? { explanation } : {}),
+        solution: [],
+        answer,
+      },
+    };
+  }
 
   // Setup steps
   const setup: SetupStep[] = [];
@@ -280,6 +319,35 @@ export function validateQuestionContent(input: unknown): ContentCheck {
   };
 }
 
+function validateAnswerKey(r: Record<string, unknown>, errors: string[]): AnswerKey | undefined {
+  const L = AUTHORING_LIMITS;
+  const texts = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x.trim() : '')) : []);
+  if (r.type === 'multiple_choice') {
+    const choices = texts(r.choices);
+    const correctIndex = r.correctIndex;
+    if (choices.length < L.choicesMin || choices.length > L.choicesMax) {
+      errors.push(`A multiple choice question needs ${L.choicesMin} to ${L.choicesMax} choices.`);
+    }
+    if (choices.some((c) => !c)) errors.push('Every choice needs text.');
+    if (choices.some((c) => c.length > L.choiceMax)) errors.push(`Choices must be at most ${L.choiceMax} characters.`);
+    if (new Set(choices.map((c) => c.toLowerCase())).size !== choices.length) errors.push('Two choices are the same.');
+    if (typeof correctIndex !== 'number' || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= choices.length) {
+      errors.push('Mark which choice is correct.');
+      return undefined;
+    }
+    return { type: 'multiple_choice', choices, correctIndex };
+  }
+  if (r.type === 'fill_in_blank') {
+    const accepted = texts(r.accepted).filter(Boolean);
+    if (accepted.length === 0) errors.push('Enter at least one accepted answer.');
+    if (accepted.length > L.acceptedAnswersMax) errors.push(`At most ${L.acceptedAnswersMax} accepted answers.`);
+    if (accepted.some((a) => a.length > L.answerMax)) errors.push(`Accepted answers must be at most ${L.answerMax} characters.`);
+    return { type: 'fill_in_blank', accepted };
+  }
+  errors.push('Choose multiple choice or fill in the blank.');
+  return undefined;
+}
+
 function validateRule(r: Record<string, unknown>, where: string, errors: string[]): ValidatorSpec | undefined {
   const path = str(r.path);
   if (!isSafeAbsolutePath(path)) {
@@ -338,6 +406,7 @@ export function validateExamSettings(input: unknown): SettingsCheck {
     lockOnLeave: raw.lockOnLeave !== false,
     limitedTries: (raw.limitedTries ?? raw.threeTries) !== false,
     partialCredit: raw.partialCredit !== false,
+    examType: raw.examType === 'written' ? 'written' : 'linux',
   };
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value };
 }

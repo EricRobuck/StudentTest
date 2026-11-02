@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import type { ExamSummary } from '@linuxlab/shared';
+import { isWrittenExam, type ExamSummary, type ExamType } from '@linuxlab/shared';
 import { instructorApi } from '../api/client';
 
 /** Whether students can choose this test on the start screen. */
@@ -14,6 +14,7 @@ export function ExamsPage({ onOpen }: { onOpen: (examId: string) => void }) {
   const [exams, setExams] = useState<ExamSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
+  const [examType, setExamType] = useState<ExamType>('linux');
   const [creating, setCreating] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
 
@@ -48,7 +49,7 @@ export function ExamsPage({ onOpen }: { onOpen: (examId: string) => void }) {
     setCreating(true);
     setError(null);
     try {
-      const exam = await instructorApi.createExam(title);
+      const exam = await instructorApi.createExam(title, examType);
       onOpen(exam.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -69,6 +70,7 @@ export function ExamsPage({ onOpen }: { onOpen: (examId: string) => void }) {
           <thead>
             <tr>
               <th scope="col">Exam</th>
+              <th scope="col">Type</th>
               <th scope="col">Open to students</th>
               <th scope="col" className="num">Approved</th>
               <th scope="col" className="num">Drafts</th>
@@ -90,6 +92,7 @@ export function ExamsPage({ onOpen }: { onOpen: (examId: string) => void }) {
                     {e.title}
                   </a>
                 </td>
+                <td>{isWrittenExam(e.settings) ? 'Written' : 'Linux lab'}</td>
                 <td onClick={(ev) => ev.stopPropagation()}>
                   <span className="action-row">
                     <OpenBadge exam={e} />
@@ -123,6 +126,11 @@ export function ExamsPage({ onOpen }: { onOpen: (examId: string) => void }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+        <label htmlFor="new-exam-type">Type</label>
+        <select id="new-exam-type" value={examType} onChange={(e) => setExamType(e.target.value === 'written' ? 'written' : 'linux')}>
+          <option value="linux">Linux lab (students work in a terminal)</option>
+          <option value="written">Written test (multiple choice, fill in the blank)</option>
+        </select>
         <button type="submit" disabled={creating || title.trim().length === 0}>
           {creating ? 'Creating…' : 'Create exam'}
         </button>

@@ -55,6 +55,45 @@ Rules for good questions:
 - Do not reveal the answer command in the question text. Put guidance in the hint instead, and explain the answer in the explanation (the explanation is shown after the exam).
 - Match the requested difficulty: beginner means one or two basic commands; intermediate combines a few commands or options; advanced may need pipes, find with conditions, or several steps.`;
 
+const WRITTEN_SYSTEM_PROMPT = `You write test questions for college students. Students answer on screen, on any subject the instructor names. There are two question formats:
+- multiple_choice: fill in "choices" with 2 to 6 distinct, plausible options and "correct_index" with the position of the only correct one, counting from 0. Leave "accepted_answers" empty.
+- fill_in_blank: the student types a short answer, usually one word or a short phrase. Fill in "accepted_answers" with every reasonable correct wording; capitals and extra spaces are ignored when grading. Leave "choices" empty and set "correct_index" to 0.
+
+Rules for good questions:
+- Use a mix of both formats unless the instructor asks otherwise.
+- Each question has exactly one correct answer, and the question text must not reveal it. A fill_in_blank question must have a short answer that can be matched exactly, so avoid questions that need a sentence to answer. Show the blank as ____ when it fits.
+- Vary which position holds the correct choice, and don't use "all of the above" or "none of the above".
+- Match the requested difficulty: beginner means recalling basic facts; intermediate means applying an idea; advanced means reasoning through a realistic situation.
+- Put guidance in the hint, and explain the answer in the explanation.`;
+
+const WRITTEN_OUTPUT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['questions'],
+  properties: {
+    questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['title', 'text', 'category', 'difficulty', 'format', 'choices', 'correct_index', 'accepted_answers', 'hint', 'explanation'],
+        properties: {
+          title: { type: 'string', description: 'Short title, a few words. Must not reveal the answer.' },
+          text: { type: 'string', description: 'The question, addressed to the student.' },
+          category: { type: 'string', description: 'Topic.' },
+          difficulty: { type: 'string', enum: ['beginner', 'intermediate', 'advanced'] },
+          format: { type: 'string', enum: ['multiple_choice', 'fill_in_blank'] },
+          choices: { type: 'array', items: { type: 'string' } },
+          correct_index: { type: 'integer' },
+          accepted_answers: { type: 'array', items: { type: 'string' } },
+          hint: { type: 'string' },
+          explanation: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const;
+
 /** JSON schema for the drafts. Kept within what structured outputs support. */
 const OUTPUT_SCHEMA = {
   type: 'object',
@@ -147,6 +186,11 @@ interface RawDraft {
   hint?: unknown;
   explanation?: unknown;
   solution?: unknown;
+  // Written questions
+  format?: unknown;
+  choices?: unknown;
+  correct_index?: unknown;
+  accepted_answers?: unknown;
 }
 
 export class QuestionGenerator {
@@ -162,7 +206,7 @@ export class QuestionGenerator {
   async generate(
     request: GenerateQuestionsRequest,
     existingTitles: string[],
-    options: { allowSudo: boolean } = { allowSudo: false },
+    options: { allowSudo: boolean; written?: boolean } = { allowSudo: false },
   ): Promise<GeneratedDrafts> {
     if (!this.enabled) throw new GenerationError('AI question writing is not set up: add OPENAI_API_KEY to the .env file.');
     // Large batches can take several minutes; allow up to 20 before giving up.
@@ -180,13 +224,15 @@ export class QuestionGenerator {
     try {
       response = await this.client.responses.create({
         model: this.model,
-        instructions: SYSTEM_PROMPT_TEMPLATE.replace('{{STUDENT_POWERS}}', studentPowers(options.allowSudo)),
+        instructions: options.written
+          ? WRITTEN_SYSTEM_PROMPT
+          : SYSTEM_PROMPT_TEMPLATE.replace('{{STUDENT_POWERS}}', studentPowers(options.allowSudo)),
         input: prompt,
         reasoning: { effort: 'medium' },
         // Room for the reasoning plus up to 30 questions of JSON.
         max_output_tokens: 100000,
         // Strict mode: the answer is guaranteed to match OUTPUT_SCHEMA.
-        text: { format: { type: 'json_schema', name: 'exam_questions', schema: OUTPUT_SCHEMA, strict: true } },
+        text: { format: { type: 'json_schema', name: 'exam_questions', schema: options.written ? WRITTEN_OUTPUT_SCHEMA : OUTPUT_SCHEMA, strict: true } },
       });
     } catch (err) {
       // OpenAI's own message (never contains the key) helps diagnose model/quota/schema problems.
@@ -227,7 +273,7 @@ export class QuestionGenerator {
 
     const drafts: GeneratedDrafts = { valid: [], rejected: [] };
     for (const raw of (parsed.questions ?? []).slice(0, AUTHORING_LIMITS.generateCountMax)) {
-      const checked = validateQuestionContent(toContent(raw, request.pointsEach));
+      const checked = validateQuestionContent(options.written ? toWrittenContent(raw, request.pointsEach) : toContent(raw, request.pointsEach));
       if (checked.ok) drafts.valid.push(checked.value);
       else drafts.rejected.push({ title: typeof raw.title === 'string' ? raw.title : '(untitled)', errors: checked.errors });
     }
@@ -237,6 +283,23 @@ export class QuestionGenerator {
     );
     return drafts;
   }
+}
+
+/** Maps the AI's JSON for a written question onto QuestionContent (validated right after). */
+function toWrittenContent(raw: RawDraft, points: number): unknown {
+  return {
+    title: raw.title,
+    text: raw.text,
+    points,
+    category: raw.category,
+    difficulty: raw.difficulty,
+    hint: raw.hint,
+    explanation: raw.explanation,
+    answer:
+      raw.format === 'multiple_choice'
+        ? { type: 'multiple_choice', choices: raw.choices, correctIndex: raw.correct_index }
+        : { type: 'fill_in_blank', accepted: raw.accepted_answers },
+  };
 }
 
 /** Maps the AI's JSON onto QuestionContent (validated right after). */

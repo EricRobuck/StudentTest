@@ -133,6 +133,12 @@ export interface AttemptRepository {
   /** Unlocks and logs the event. Returns true if it was locked. */
   unlock(id: string, by: string, at: string): Promise<boolean>;
   integrityEvents(id: string): Promise<IntegrityEventRecord[]>;
+  /** Saves a student's answer to a written question; null clears it. */
+  saveAnswer(id: string, questionId: string, answer: string | null, at: string): Promise<void>;
+  answers(id: string): Promise<Array<{ questionId: string; answer: string }>>;
+  /** Records the instructor's decision on a question; null goes back to the automatic grade. */
+  setOverride(id: string, questionId: string, correct: boolean | null, at: string): Promise<void>;
+  overrides(id: string): Promise<Array<{ questionId: string; correct: boolean }>>;
   /** Permanently removes an attempt and everything recorded for it. False if it didn't exist. */
   delete(id: string): Promise<boolean>;
   /** Records who is taking an attempt that started without a name. */

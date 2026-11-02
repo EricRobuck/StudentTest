@@ -30,6 +30,7 @@ export interface ExamRouteDeps {
 export function examRouter({ sessions, attempts, runtime, limiters }: ExamRouteDeps): Router {
   const router = Router();
   const sameOrigin = requireAllowedOrigin(config.security.allowedOrigins);
+  const writeLimit = rateLimit(limiters.writes, (_req, res) => sessionOf(res).id, 'Too many requests. Slow down.');
   const submitLimit = rateLimit(limiters.submits, (_req, res) => sessionOf(res).id, 'Too many submissions. Wait a moment and try again.');
 
   // GET /api/exam — the exam this student is taking, without validators or answers.
@@ -40,6 +41,35 @@ export function examRouter({ sessions, attempts, runtime, limiters }: ExamRouteD
       if (!exam) return sendError(res, 404, 'NOT_FOUND', 'Exam not found');
       const body: StudentExam = toStudentExam(exam);
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PUT /api/exam/questions/:questionId/answer { answer } — save a written question's answer.
+  router.put('/exam/questions/:questionId/answer', sameOrigin, requireSession(sessions), writeLimit, async (req, res, next) => {
+    const questionId = String(req.params.questionId);
+    const answer: unknown = (req.body as { answer?: unknown } | undefined)?.answer;
+    if (!QUESTION_ID.test(questionId) || typeof answer !== 'string') return sendError(res, 400, 'BAD_REQUEST', 'An answer is required');
+    try {
+      const attempt = await attempts.get(sessionOf(res).attemptId);
+      const exam = attempt && examForAttempt(attempt);
+      if (!attempt || !exam) return sendError(res, 404, 'NOT_FOUND', 'Exam attempt not found');
+      const outcome = await attempts.saveWrittenAnswer(exam, attempt, questionId, answer);
+      if (outcome.ok) {
+        res.json(outcome.progress);
+        return;
+      }
+      switch (outcome.reason) {
+        case 'unknown-question':
+          return sendError(res, 404, 'NOT_FOUND', 'No such question');
+        case 'invalid':
+          return sendError(res, 400, 'INVALID_ANSWER', 'That answer is not valid.');
+        case 'completed':
+          return sendError(res, 409, 'COMPLETED', BLOCK_MESSAGES.completed);
+        case 'test-locked':
+          return sendError(res, 409, 'TEST_LOCKED', BLOCK_MESSAGES['test-locked']);
+      }
     } catch (err) {
       next(err);
     }

@@ -141,7 +141,8 @@ export function StartScreen({ onStarted, initial }: StartScreenProps) {
                   {' '}
                   · {exam.questionCount} question{exam.questionCount === 1 ? '' : 's'} · {exam.totalPoints} points ·{' '}
                   {exam.timeLimitMinutes ? `${exam.timeLimitMinutes} minutes` : 'no time limit'} ·{' '}
-                  {exam.mode === 'exam' ? 'one attempt' : 'practice'}
+                  {exam.mode === 'exam' ? 'one attempt' : 'practice'} ·{' '}
+                  {exam.examType === 'written' ? 'written test' : 'Linux lab'}
                 </span>
                 {exam.description && <span className="muted small test-description">{exam.description}</span>}
               </span>

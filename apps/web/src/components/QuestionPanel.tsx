@@ -10,6 +10,8 @@ interface QuestionPanelProps {
   lastSubmit: SubmitResult | undefined;
   submitting: boolean;
   submitError: string | null;
+  /** Written test: answered on the right, so there is nothing to submit here. */
+  written?: boolean;
   onSubmit: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -22,6 +24,7 @@ export function QuestionPanel({
   lastSubmit,
   submitting,
   submitError,
+  written = false,
   onSubmit,
   onPrevious,
   onNext,
@@ -98,9 +101,11 @@ export function QuestionPanel({
         <button type="button" className="secondary" onClick={onPrevious} disabled={isFirst}>
           ← Previous
         </button>
-        <button type="button" onClick={onSubmit} disabled={submitting || locked}>
-          {submitLabel}
-        </button>
+        {!written && (
+          <button type="button" onClick={onSubmit} disabled={submitting || locked}>
+            {submitLabel}
+          </button>
+        )}
         <button type="button" className="secondary" onClick={onNext} disabled={isLast}>
           Next →
         </button>

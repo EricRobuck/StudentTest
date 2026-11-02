@@ -121,6 +121,23 @@ question, whether written by hand or by AI, is test-run in a sandbox and needs
 your approval before students see it. Make an exam **active** to give it to
 students.
 
+## Two types of test
+
+Choose the type when you create a test under **Exams**. It can't be changed later.
+
+- **Linux lab:** students work in a real terminal, graded from the state of
+  their Linux environment.
+- **Written test:** multiple choice and fill-in-the-blank questions, on any
+  subject. The answer area sits where the terminal would be, and no Linux
+  environment is created. Answers save automatically and can be changed until
+  the student finishes. Fill-in-the-blank grading ignores capitals and extra
+  spaces. Students see their results when the test is over.
+
+In **Student attempts**, open a finished attempt to review it and mark any
+question correct or not correct (for either type); scores update immediately.
+The **Test results** table there shows each test's mean, high and low from
+finished attempts.
+
 ## Instructor pages
 
 Open http://127.0.0.1:5173/instructor. Access needs `INSTRUCTOR_PASSWORD`

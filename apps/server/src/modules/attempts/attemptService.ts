@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
+  AUTHORING_LIMITS,
   effectiveMaxAttempts,
+  isAnswerCorrect,
+  isWrittenExam,
   type AttemptEndReason,
   type AttemptView,
   type ExamResultView,
@@ -17,10 +20,24 @@ import type { ExamDefinition } from '../exams/types.js';
 //    be undone by later tasks (cd away from /etc, overwrite a file), so a
 //    later failed re-check never takes points away.
 //  - The exam score is the sum of those points.
+//  - Written questions are graded from the student's current answer.
+//  - A question the instructor marked by hand is correct (full points) or not
+//    correct (0), whatever automatic grading says.
 //  - Deadlines use the server clock only.
 
 /** 'locked' = question locked after submit; 'test-locked' = student left the screen. */
 export type SubmitBlock = 'completed' | 'locked' | 'no-attempts-left' | 'test-locked';
+
+/** Everything a student has done on an attempt that counts towards the grade. */
+export interface AttemptWork {
+  submissions: SubmissionRecord[];
+  answers: Map<string, string>;
+  overrides: Map<string, boolean>;
+}
+
+export type SaveAnswerOutcome =
+  | { ok: true; progress: QuestionProgress }
+  | { ok: false; reason: 'unknown-question' | 'invalid' | 'completed' | 'test-locked' };
 
 export class AttemptService {
   private readonly completedListeners: Array<(attemptId: string) => void> = [];
@@ -135,6 +152,46 @@ export class AttemptService {
     return this.repos.submissions.listForAttempt(attemptId);
   }
 
+  async work(attemptId: string): Promise<AttemptWork> {
+    const [submissions, answers, overrides] = await Promise.all([
+      this.repos.submissions.listForAttempt(attemptId),
+      this.repos.attempts.answers(attemptId),
+      this.repos.attempts.overrides(attemptId),
+    ]);
+    return {
+      submissions,
+      answers: new Map(answers.map((a) => [a.questionId, a.answer])),
+      overrides: new Map(overrides.map((o) => [o.questionId, o.correct])),
+    };
+  }
+
+  /** Saves a student's answer to a written question (changeable until the test ends). */
+  async saveWrittenAnswer(exam: ExamDefinition, attempt: AttemptRecord, questionId: string, raw: string): Promise<SaveAnswerOutcome> {
+    const question = exam.questions.find((q) => q.id === questionId);
+    if (!question?.answer) return { ok: false, reason: 'unknown-question' };
+    if (attempt.status !== 'in_progress') return { ok: false, reason: 'completed' };
+    if (attempt.lockedAt) return { ok: false, reason: 'test-locked' };
+    const answer = raw.trim();
+    if (answer.length > AUTHORING_LIMITS.answerMax) return { ok: false, reason: 'invalid' };
+    if (answer && question.answer.type === 'multiple_choice') {
+      const inRange = /^\d{1,2}$/.test(answer) && Number(answer) < question.answer.choices.length;
+      if (!inRange) return { ok: false, reason: 'invalid' };
+    }
+    await this.repos.attempts.saveAnswer(attempt.id, questionId, answer || null, new Date().toISOString());
+    return { ok: true, progress: this.progress(exam, attempt, await this.work(attempt.id), questionId) };
+  }
+
+  /** The instructor marks a question of a finished attempt correct or not correct (null = automatic grade). */
+  async setGradeOverride(attemptId: string, questionId: string, correct: boolean | null): Promise<'ok' | 'not-found' | 'in-progress'> {
+    const attempt = await this.get(attemptId);
+    const exam = attempt && this.examFor(attempt);
+    if (!attempt || !exam?.questions.some((q) => q.id === questionId)) return 'not-found';
+    if (attempt.status !== 'completed') return 'in-progress';
+    await this.repos.attempts.setOverride(attemptId, questionId, correct, new Date().toISOString());
+    console.log(`[audit] attempt ${attemptId} question ${questionId}: instructor set ${correct === null ? 'automatic grade' : correct ? 'correct' : 'not correct'}`);
+    return 'ok';
+  }
+
   /** Why a submission for this question would be refused, or null if allowed. */
   submitBlock(exam: ExamDefinition, attempt: AttemptRecord, questionId: string, subs: SubmissionRecord[]): SubmitBlock | null {
     if (attempt.status !== 'in_progress') return 'completed';
@@ -174,10 +231,25 @@ export class AttemptService {
     exam: ExamDefinition,
     attempt: AttemptRecord,
     questionId: string,
-    subs: SubmissionRecord[],
+    work: AttemptWork,
   ): QuestionResult {
     const question = exam.questions.find((q) => q.id === questionId);
-    const mine = subs.filter((s) => s.questionId === questionId);
+    const override = work.overrides.get(questionId);
+    if (override !== undefined) {
+      return { passed: override, points: override ? (question?.points ?? 0) : 0, partial: false, final: true, submitted: true };
+    }
+    if (question?.answer) {
+      const answer = work.answers.get(questionId);
+      const correct = answer !== undefined && isAnswerCorrect(question.answer, answer);
+      return {
+        passed: correct,
+        points: correct ? question.points : 0,
+        partial: false,
+        final: attempt.status === 'completed',
+        submitted: answer !== undefined,
+      };
+    }
+    const mine = work.submissions.filter((s) => s.questionId === questionId);
     const passed = mine.some((s) => s.passed);
     const final = attempt.status === 'completed' || passed || this.noTriesLeft(exam, mine.length);
     let points = 0;
@@ -196,10 +268,22 @@ export class AttemptService {
     return max !== null && count >= max;
   }
 
-  progress(exam: ExamDefinition, attempt: AttemptRecord, subs: SubmissionRecord[], questionId: string): QuestionProgress {
+  progress(exam: ExamDefinition, attempt: AttemptRecord, work: AttemptWork, questionId: string): QuestionProgress {
+    const result = this.questionResult(exam, attempt, questionId, work);
+    if (exam.questions.find((q) => q.id === questionId)?.answer) {
+      // Written: answers can change until the test ends; results only come after that.
+      const over = attempt.status === 'completed';
+      return {
+        questionId,
+        attempts: work.answers.has(questionId) ? 1 : 0,
+        attemptsRemaining: null,
+        locked: over || attempt.lockedAt !== null,
+        best: over && result.submitted ? { passed: result.passed, pointsAwarded: result.points, partial: false } : null,
+      };
+    }
+    const subs = work.submissions;
     const mine = subs.filter((s) => s.questionId === questionId);
     const max = effectiveMaxAttempts(exam.settings);
-    const result = this.questionResult(exam, attempt, questionId, subs);
     const revealed = exam.settings.showFeedback || attempt.status === 'completed';
     const locked = this.submitBlock(exam, attempt, questionId, subs) !== null;
     return {
@@ -211,18 +295,20 @@ export class AttemptService {
     };
   }
 
-  score(exam: ExamDefinition, attempt: AttemptRecord, subs: SubmissionRecord[]): ScoreView {
+  score(exam: ExamDefinition, attempt: AttemptRecord, work: AttemptWork): ScoreView {
     const questions = orderedQuestions(exam);
     return {
-      earned: round2(questions.reduce((sum, q) => sum + this.questionResult(exam, attempt, q.id, subs).points, 0)),
+      earned: round2(questions.reduce((sum, q) => sum + this.questionResult(exam, attempt, q.id, work).points, 0)),
       max: questions.reduce((sum, q) => sum + q.points, 0),
     };
   }
 
   /** The student's view of their attempt; hides what the exam settings hide. */
   async view(exam: ExamDefinition, attempt: AttemptRecord): Promise<AttemptView> {
-    const subs = await this.submissions(attempt.id);
-    const scoreVisible = exam.settings.showScoreDuringExam || attempt.status === 'completed';
+    const work = await this.work(attempt.id);
+    const written = isWrittenExam(exam.settings);
+    // A running score would tell a written test's students which answers are right.
+    const scoreVisible = (exam.settings.showScoreDuringExam && !written) || attempt.status === 'completed';
     return {
       id: attempt.id,
       status: attempt.status,
@@ -231,15 +317,16 @@ export class AttemptService {
       serverTime: new Date().toISOString(),
       currentQuestionId: attempt.currentQuestionId,
       locked: attempt.lockedAt ? { at: attempt.lockedAt, reason: attempt.lockReason ?? '' } : null,
-      score: scoreVisible ? this.score(exam, attempt, subs) : null,
-      questions: orderedQuestions(exam).map((q) => this.progress(exam, attempt, subs, q.id)),
+      score: scoreVisible ? this.score(exam, attempt, work) : null,
+      questions: orderedQuestions(exam).map((q) => this.progress(exam, attempt, work, q.id)),
+      ...(written ? { answers: Object.fromEntries(work.answers) } : {}),
     };
   }
 
   /** Final results. Only valid for completed attempts. */
   async result(exam: ExamDefinition, attempt: AttemptRecord): Promise<ExamResultView> {
-    const subs = await this.submissions(attempt.id);
-    const score = this.score(exam, attempt, subs);
+    const work = await this.work(attempt.id);
+    const score = this.score(exam, attempt, work);
     return {
       examTitle: exam.title,
       studentName: attempt.studentName,
@@ -251,8 +338,7 @@ export class AttemptService {
       percentage: score.max === 0 ? 0 : Math.round((score.earned / score.max) * 1000) / 10,
       canRetake: exam.settings.mode === 'practice',
       questions: orderedQuestions(exam).map((q, i) => {
-        const mine = subs.filter((s) => s.questionId === q.id);
-        const r = this.questionResult(exam, attempt, q.id, subs);
+        const r = this.questionResult(exam, attempt, q.id, work);
         return {
           questionId: q.id,
           number: i + 1,
@@ -261,7 +347,7 @@ export class AttemptService {
           maxPoints: q.points,
           passed: r.passed,
           partial: r.partial,
-          attempts: mine.length,
+          attempts: this.progress(exam, attempt, work, q.id).attempts,
         };
       }),
     };

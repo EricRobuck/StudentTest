@@ -1,5 +1,6 @@
 import {
   AUTHORING_LIMITS,
+  isWrittenExam,
   validateExamSettings,
   validateQuestionContent,
   type AiStatus,
@@ -8,11 +9,13 @@ import {
   type GenerateQuestionsRequest,
   type GenerateQuestionsResponse,
   type InstructorQuestion,
+  type QuestionContent,
   type QuestionSource,
+  type QuestionVerification,
 } from '@linuxlab/shared';
 import type { ContainerRuntime } from '../containers/index.js';
 import { toInstructorQuestion, UNTESTED, type ExamCatalog } from '../exams/examCatalog.js';
-import { practiceSettings } from '../exams/sampleExam.js';
+import { practiceSettings, writtenSettings } from '../exams/sampleExam.js';
 import { GenerationError, type QuestionGenerator } from './questionGenerator.js';
 import { verifyQuestion } from './questionVerifier.js';
 
@@ -24,6 +27,17 @@ export class AuthoringError extends Error {
   ) {
     super(message);
   }
+}
+
+/** Written questions have nothing to run: validation already checked the answer key. */
+function writtenVerification(): QuestionVerification {
+  return {
+    status: 'passed',
+    checkedAt: new Date().toISOString(),
+    passedBeforeSolution: null,
+    passedAfterSolution: null,
+    notes: [],
+  };
 }
 
 /** AI requests per hour, to keep API costs predictable. */
@@ -70,12 +84,12 @@ export class AuthoringService {
     try {
       const drafts = await this.generator.generate(request, exam.questions.map((q) => q.content.title), {
         allowSudo: exam.settings.allowSudo === true,
+        written: isWrittenExam(exam.settings),
       });
       const created: InstructorQuestion[] = [];
       for (const content of drafts.valid) {
         const q = await this.catalog.addQuestion(examId, content, 'ai');
-        this.queueVerification(q.id);
-        created.push(toInstructorQuestion(q));
+        created.push(await this.startVerification(q.id));
       }
       return { created, rejected: drafts.rejected };
     } catch (err) {
@@ -96,10 +110,10 @@ export class AuthoringService {
     return exam;
   }
 
-  async createExam(title: unknown): Promise<ExamDetail> {
+  async createExam(title: unknown, examType?: unknown): Promise<ExamDetail> {
     const t = typeof title === 'string' ? title.trim() : '';
     if (!t || t.length > 120) throw new AuthoringError(400, 'Exam title is required (max 120 characters).');
-    const id = await this.catalog.createExam(t, practiceSettings);
+    const id = await this.catalog.createExam(t, examType === 'written' ? writtenSettings : practiceSettings);
     return this.examDetail(id);
   }
 
@@ -112,7 +126,9 @@ export class AuthoringService {
     if (description.length > 1000) throw new AuthoringError(400, 'Description is too long (max 1000 characters).');
     const settings = validateExamSettings(raw.settings);
     if (!settings.ok) throw new AuthoringError(400, settings.errors.join(' '));
-    await this.catalog.updateExam(id, { title, description: description || null, settings: settings.value });
+    // The type is chosen when the test is created and doesn't change: its questions depend on it.
+    const merged = { ...settings.value, examType: isWrittenExam(before.settings) ? ('written' as const) : ('linux' as const) };
+    await this.catalog.updateExam(id, { title, description: description || null, settings: merged });
     // Turning sudo on or off changes what students can do: re-test every
     // question in the new environment (failures are un-approved automatically).
     if ((before.settings.allowSudo === true) !== (settings.value.allowSudo === true)) {
@@ -141,22 +157,22 @@ export class AuthoringService {
   }
 
   async addQuestion(examId: string, body: unknown, source: QuestionSource = 'manual'): Promise<InstructorQuestion> {
-    this.examDetail(examId);
+    const exam = this.examDetail(examId);
     const checked = validateQuestionContent(body);
     if (!checked.ok) throw new AuthoringError(400, checked.errors.join(' '));
+    this.assertFitsExam(exam, checked.value);
     const q = await this.catalog.addQuestion(examId, checked.value, source);
-    this.queueVerification(q.id);
-    return toInstructorQuestion(q);
+    return this.startVerification(q.id);
   }
 
   async updateQuestion(examId: string, questionId: string, body: unknown): Promise<InstructorQuestion> {
     this.questionIn(examId, questionId);
     const checked = validateQuestionContent(body);
     if (!checked.ok) throw new AuthoringError(400, checked.errors.join(' '));
+    this.assertFitsExam(this.examDetail(examId), checked.value);
     // Changed content must be re-tested and re-approved.
-    const q = await this.catalog.updateQuestion(questionId, { content: checked.value, status: 'draft', verification: UNTESTED });
-    this.queueVerification(questionId);
-    return toInstructorQuestion(q!);
+    await this.catalog.updateQuestion(questionId, { content: checked.value, status: 'draft', verification: UNTESTED });
+    return this.startVerification(questionId);
   }
 
   async approve(examId: string, questionId: string): Promise<InstructorQuestion> {
@@ -194,7 +210,32 @@ export class AuthoringService {
     this.queueVerification(questionId);
   }
 
+  private assertFitsExam(exam: ExamDetail, content: QuestionContent): void {
+    if (isWrittenExam(exam.settings) !== Boolean(content.answer)) {
+      throw new AuthoringError(
+        400,
+        isWrittenExam(exam.settings)
+          ? 'This is a written test: questions need multiple choice or fill-in-the-blank answers.'
+          : 'This is a Linux lab: questions are graded in the terminal, not with typed answers.',
+      );
+    }
+  }
+
+  /** Written questions are ready straight away; Linux questions go to the sandbox. */
+  private async startVerification(questionId: string): Promise<InstructorQuestion> {
+    if (this.catalog.question(questionId)?.content.answer) {
+      await this.catalog.updateQuestion(questionId, { verification: writtenVerification() });
+    } else {
+      this.queueVerification(questionId);
+    }
+    return toInstructorQuestion(this.catalog.question(questionId)!);
+  }
+
   queueVerification(questionId: string): void {
+    if (this.catalog.question(questionId)?.content.answer) {
+      void this.catalog.updateQuestion(questionId, { verification: writtenVerification() });
+      return;
+    }
     void this.catalog.updateQuestion(questionId, {
       verification: { ...UNTESTED, status: 'running', notes: ['Waiting for / running the sandbox test…'] },
     });

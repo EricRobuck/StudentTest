@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { AttemptStatus, StudentInfo } from '@linuxlab/shared';
+import { isWrittenExam, type AttemptStatus, type StudentInfo } from '@linuxlab/shared';
 import type { AttemptService } from '../attempts/attemptService.js';
 import { ContainerError, type ContainerRuntime } from '../containers/index.js';
 import type { AttemptRecord, Repositories, SessionRecord } from '../db/index.js';
@@ -79,12 +79,18 @@ export class SessionManager {
     if (attempt.status === 'completed') {
       return { ...base, session: toSession(existing), attemptStatus: 'completed', environmentReset: false };
     }
+    const exam = this.examFor(attempt);
+    if (exam && isWrittenExam(exam.settings)) {
+      // Written tests have no Linux environment to check or recreate.
+      await this.touch(existing.id, true);
+      return { ...base, session: toSession(existing), attemptStatus: 'in_progress', environmentReset: false };
+    }
     if (existing.containerId && (await this.runtime.isRunning(existing.containerId))) {
       await this.touch(existing.id, true);
       return { ...base, session: toSession(existing), attemptStatus: 'in_progress', environmentReset: false };
     }
     if (existing.containerId) await this.endEnvironment(existing.id, 'environment-lost');
-    const container = await this.createPreparedContainer(existing.id, this.examFor(attempt));
+    const container = await this.createPreparedContainer(existing.id, exam);
     await this.repos.sessions.setContainer(existing.id, container.containerId, container.name);
     await this.touch(existing.id, true);
     console.log(`[sessions] new environment for session ${existing.id} → ${container.name}`);
@@ -116,12 +122,13 @@ export class SessionManager {
     const newToken = randomBytes(32).toString('base64url');
     const id = randomUUID();
     // Prepare the environment first, so a failure leaves no half-started attempt.
-    const container = await this.createPreparedContainer(id, exam);
+    // Written tests don't use one.
+    const container = isWrittenExam(exam.settings) ? null : await this.createPreparedContainer(id, exam);
     let attempt;
     try {
       attempt = await this.attempts.start(exam, student);
     } catch (err) {
-      await this.runtime.destroy(container.containerId).catch(() => undefined);
+      if (container) await this.runtime.destroy(container.containerId).catch(() => undefined);
       throw err;
     }
     const now = new Date().toISOString();
@@ -129,13 +136,13 @@ export class SessionManager {
       id,
       tokenHash: hashToken(newToken),
       attemptId: attempt.id,
-      containerId: container.containerId,
-      containerName: container.name,
+      containerId: container?.containerId ?? null,
+      containerName: container?.name ?? null,
       createdAt: now,
       lastActiveAt: now,
     };
     await this.repos.sessions.create(record);
-    console.log(`[sessions] created session ${id} (attempt ${attempt.id}) → ${container.name}`);
+    console.log(`[sessions] created session ${id} (attempt ${attempt.id}) → ${container?.name ?? 'written test'}`);
     return {
       session: toSession(record),
       token: newToken,

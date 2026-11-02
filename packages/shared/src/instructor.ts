@@ -2,7 +2,7 @@
 // grading detail, command history and filesystem snapshots, so the server
 // sends them only to an authenticated instructor.
 
-import type { AttemptEndReason, AttemptStatus, ScoreView, ValidationSpec, ValidatorType } from './exam.js';
+import type { AnswerKey, AttemptEndReason, AttemptStatus, ExamType, ScoreView, ValidationSpec, ValidatorType } from './exam.js';
 
 /** Response body of GET /api/instructor/me. */
 export interface InstructorStatus {
@@ -32,6 +32,7 @@ export interface AttemptSummary {
   lockReason: string | null;
   /** How many times the student left the test screen. */
   timesLeft: number;
+  examType: ExamType;
 }
 
 /** A time the student left the test screen, or an unlock. */
@@ -78,6 +79,13 @@ export interface InstructorQuestionDetail {
   passed: boolean;
   /** Not fully correct, but earned partial credit. */
   partial: boolean;
+  /** What automatic grading says, ignoring any change by the instructor. */
+  autoPassed: boolean;
+  /** The instructor's decision (null = the automatic grade stands). */
+  override: boolean | null;
+  /** Written tests: the correct answer and what the student answered. */
+  answerKey: AnswerKey | null;
+  studentAnswer: string | null;
   validation: ValidationSpec;
   /** Total time this question was the open one. */
   timeSpentSeconds: number;

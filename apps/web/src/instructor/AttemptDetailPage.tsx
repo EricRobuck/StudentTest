@@ -9,6 +9,7 @@ import type {
 import { instructorApi } from '../api/client';
 import { TaskText } from '../components/TaskText';
 import { confirmDelete, isLocked, StatusBadge, StudentLabel, UnlockButton } from './AttemptsPage';
+import { AnswerKeyView } from './ExamEditorPage';
 import { formatDateTime, formatSeconds, formatTime, printable } from './format';
 
 export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; onBack: () => void }) {
@@ -30,6 +31,7 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
   if (error) return <p className="error-text">{error}</p>;
   if (!detail) return <p className="muted">Loading attempt…</p>;
   const s = detail.summary;
+  const written = s.examType === 'written';
 
   return (
     <article className="attempt-detail">
@@ -82,13 +84,17 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
           <dd>{formatDateTime(s.startedAt)}</dd>
           <dt>Ended</dt>
           <dd>{formatDateTime(s.completedAt)}</dd>
-          <dt>Submissions</dt>
+          <dt>{written ? 'Answered' : 'Submissions'}</dt>
           <dd>{s.submissionCount}</dd>
-          <dt>Commands</dt>
-          <dd>
-            {s.commandCount}
-            {s.flaggedCommandCount > 0 && <span className="flag"> · ⚠ {s.flaggedCommandCount} flagged</span>}
-          </dd>
+          {!written && (
+            <>
+              <dt>Commands</dt>
+              <dd>
+                {s.commandCount}
+                {s.flaggedCommandCount > 0 && <span className="flag"> · ⚠ {s.flaggedCommandCount} flagged</span>}
+              </dd>
+            </>
+          )}
           <dt>Left the screen</dt>
           <dd>{s.timesLeft === 0 ? 'Never' : <span className="flag">{s.timesLeft} time{s.timesLeft === 1 ? '' : 's'}</span>}</dd>
         </dl>
@@ -116,7 +122,13 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
       </section>
 
       {detail.questions.map((q) => (
-        <QuestionSection key={q.questionId} question={q} />
+        <QuestionSection
+          key={q.questionId}
+          attemptId={s.id}
+          finished={s.status === 'completed'}
+          question={q}
+          onChanged={() => setReloadKey((n) => n + 1)}
+        />
       ))}
 
       {detail.unassignedCommands.length > 0 && (
@@ -126,12 +138,105 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
         </section>
       )}
 
-      <SnapshotSection snapshot={detail.snapshot} inProgress={s.status === 'in_progress'} />
+      {!written && <SnapshotSection snapshot={detail.snapshot} inProgress={s.status === 'in_progress'} />}
     </article>
   );
 }
 
-function QuestionSection({ question: q }: { question: InstructorQuestionDetail }) {
+/** The instructor's final word on a question: correct, not correct, or the automatic grade. */
+function GradeControl({
+  attemptId,
+  finished,
+  question: q,
+  onChanged,
+}: {
+  attemptId: string;
+  finished: boolean;
+  question: InstructorQuestionDetail;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!finished) return <p className="muted small">You can change this grade after the student finishes.</p>;
+  const set = (correct: boolean | null) => {
+    setBusy(true);
+    instructorApi
+      .setGrade(attemptId, q.questionId, correct)
+      .then(onChanged)
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="action-row grade-control">
+      <span className="small">
+        {q.override === null ? (
+          <span className="muted">Graded automatically.</span>
+        ) : (
+          <strong>Changed by you (automatic grade: {q.autoPassed ? 'correct' : 'not correct'}).</strong>
+        )}
+      </span>
+      <button type="button" className="secondary small-button" disabled={busy || q.override === true || (q.override === null && q.passed)} onClick={() => set(true)}>
+        Mark correct
+      </button>
+      <button
+        type="button"
+        className="secondary small-button"
+        disabled={busy || q.override === false || (q.override === null && !q.passed && !q.partial)}
+        onClick={() => set(false)}
+      >
+        Mark not correct
+      </button>
+      {q.override !== null && (
+        <button type="button" className="link-button" disabled={busy} onClick={() => set(null)}>
+          Back to automatic grade
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** What a student answered on a written question, next to the correct answer. */
+function WrittenAnswerReview({ question: q }: { question: InstructorQuestionDetail }) {
+  const key = q.answerKey!;
+  if (q.studentAnswer === null) return <p className="muted">The student did not answer.</p>;
+  const given = key.type === 'multiple_choice' ? (key.choices[Number(q.studentAnswer)] ?? q.studentAnswer) : q.studentAnswer;
+  return (
+    <p>
+      <strong>Student's answer:</strong> <span className={q.autoPassed ? 'pass' : 'fail'}>{printable(given)}</span>
+    </p>
+  );
+}
+
+function QuestionSection({
+  attemptId,
+  finished,
+  question: q,
+  onChanged,
+}: {
+  attemptId: string;
+  finished: boolean;
+  question: InstructorQuestionDetail;
+  onChanged: () => void;
+}) {
+  if (q.answerKey) {
+    return (
+      <section className="panel">
+        <div className="section-head">
+          <h3>
+            {q.number}. {q.title}
+          </h3>
+          <span className={q.passed ? 'pass' : 'fail'}>
+            {q.passed ? '✓' : '✗'} {q.pointsAwarded}/{q.maxPoints} points
+          </span>
+        </div>
+        <p>
+          <TaskText text={q.text} />
+        </p>
+        <WrittenAnswerReview question={q} />
+        <AnswerKeyView answer={q.answerKey} />
+        <GradeControl attemptId={attemptId} finished={finished} question={q} onChanged={onChanged} />
+      </section>
+    );
+  }
   return (
     <section className="panel">
       <div className="section-head">
@@ -145,6 +250,7 @@ function QuestionSection({ question: q }: { question: InstructorQuestionDetail }
       <p>
         <TaskText text={q.text} />
       </p>
+      <GradeControl attemptId={attemptId} finished={finished} question={q} onChanged={onChanged} />
       <p className="muted small">
         Time on question: {formatSeconds(q.timeSpentSeconds)} · Checks ({q.validation.mode === 'all' ? 'all required' : 'any one'}):{' '}
         {q.validation.rules.map(describeRule).join('; ')}

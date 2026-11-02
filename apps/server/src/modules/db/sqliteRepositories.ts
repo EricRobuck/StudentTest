@@ -167,10 +167,42 @@ export function createSqliteRepositories(db: Database): Repositories {
           return true;
         });
       },
+      async saveAnswer(id, questionId, answer, at) {
+        if (answer === null) {
+          db.prepare('DELETE FROM written_answers WHERE attempt_id = ? AND question_id = ?').run(id, questionId);
+          return;
+        }
+        db.prepare(
+          `INSERT INTO written_answers (attempt_id, question_id, answer, updated_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (attempt_id, question_id) DO UPDATE SET answer = excluded.answer, updated_at = excluded.updated_at`,
+        ).run(id, questionId, answer, at);
+      },
+      async answers(id) {
+        return db
+          .prepare('SELECT question_id, answer FROM written_answers WHERE attempt_id = ?')
+          .all(id)
+          .map((r) => ({ questionId: str(r.question_id), answer: str(r.answer) }));
+      },
+      async setOverride(id, questionId, correct, at) {
+        if (correct === null) {
+          db.prepare('DELETE FROM grade_overrides WHERE attempt_id = ? AND question_id = ?').run(id, questionId);
+          return;
+        }
+        db.prepare(
+          `INSERT INTO grade_overrides (attempt_id, question_id, correct, at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (attempt_id, question_id) DO UPDATE SET correct = excluded.correct, at = excluded.at`,
+        ).run(id, questionId, correct ? 1 : 0, at);
+      },
+      async overrides(id) {
+        return db
+          .prepare('SELECT question_id, correct FROM grade_overrides WHERE attempt_id = ?')
+          .all(id)
+          .map((r) => ({ questionId: str(r.question_id), correct: Number(r.correct) === 1 }));
+      },
       async delete(id) {
         return inTransaction(db, () => {
           // Children first: foreign keys are enforced and don't cascade.
-          for (const table of ['command_log', 'fs_snapshots', 'question_visits', 'submissions', 'attempt_questions', 'integrity_events', 'sessions']) {
+          for (const table of ['command_log', 'fs_snapshots', 'question_visits', 'submissions', 'attempt_questions', 'integrity_events', 'written_answers', 'grade_overrides', 'sessions']) {
             db.prepare(`DELETE FROM ${table} WHERE attempt_id = ?`).run(id);
           }
           return Number(db.prepare('DELETE FROM exam_attempts WHERE id = ?').run(id).changes) > 0;
