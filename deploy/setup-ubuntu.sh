@@ -112,6 +112,9 @@ TRUST_PROXY=loopback
 EOF
 chmod 600 "$ENV_FILE"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+# Student records and password hashes: only the exam program may read them.
+chmod 700 "$APP_DIR/data"
+find "$APP_DIR/data" -type f -exec chmod 600 {} +
 
 say "Installing and building (a few minutes)"
 sudo -u "$APP_USER" -H bash -c "cd $APP_DIR && npm ci --no-audit --no-fund && npm run build -w @linuxlab/web"
