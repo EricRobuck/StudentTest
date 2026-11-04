@@ -14,10 +14,16 @@ export type ExamType = 'linux' | 'written';
 /** The correct answer of a written question. Never sent to students. */
 export type AnswerKey =
   | { type: 'multiple_choice'; choices: string[]; correctIndex: number }
-  | { type: 'fill_in_blank'; accepted: string[] };
+  | { type: 'fill_in_blank'; accepted: string[] }
+  /** Graded by the instructor, optionally with AI suggestions. */
+  | { type: 'short_answer'; rubric: string; sampleAnswer?: string };
 
 /** What a student sees of a written question's answer: no correct answer in it. */
-export type StudentAnswerFormat = { type: 'multiple_choice'; choices: string[] } | { type: 'fill_in_blank' };
+export type StudentAnswerFormat =
+  /** `value` is what gets saved as the answer; the display order may be shuffled per student. */
+  | { type: 'multiple_choice'; choices: Array<{ value: string; text: string }> }
+  | { type: 'fill_in_blank' }
+  | { type: 'short_answer' };
 
 /** Ignores capitals, surrounding spaces and repeated spaces. */
 function normalizeAnswer(text: string): string {
@@ -26,6 +32,7 @@ function normalizeAnswer(text: string): string {
 
 /** Grades a written answer. Multiple choice answers are the choice's index, as text. */
 export function isAnswerCorrect(key: AnswerKey, answer: string): boolean {
+  if (key.type === 'short_answer') return false; // only ever graded by hand
   if (key.type === 'multiple_choice') return answer === String(key.correctIndex);
   const given = normalizeAnswer(answer);
   return given.length > 0 && key.accepted.some((a) => normalizeAnswer(a) === given);
@@ -105,7 +112,7 @@ export interface QuestionProgress {
   /** No further submissions accepted (attempt limit, lock-after-submit, or exam over). */
   locked: boolean;
   /** Best result so far; null if never submitted or results are hidden until the end. */
-  best: { passed: boolean; pointsAwarded: number; partial: boolean } | null;
+  best: { passed: boolean; pointsAwarded: number; partial: boolean; pending?: boolean } | null;
 }
 
 /** Response body of POST /api/exam/questions/:questionId/submit. */
@@ -161,8 +168,12 @@ export interface ExamResultView {
     passed: boolean;
     /** Not fully correct, but earned partial credit. */
     partial: boolean;
+    /** A short answer the instructor hasn't graded yet. */
+    pending: boolean;
     attempts: number;
   }>;
+  /** Short answers still to be graded: the score can still go up. */
+  pendingCount: number;
 }
 
 /** The exam rules a student is allowed to know. */

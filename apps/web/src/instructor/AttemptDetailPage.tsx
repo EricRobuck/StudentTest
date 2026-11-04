@@ -144,6 +144,53 @@ export function AttemptDetailPage({ attemptId, onBack }: { attemptId: string; on
 }
 
 /** The instructor's final word on a question: correct, not correct, or the automatic grade. */
+/** Points for a short answer, with the AI's suggestion if there is one. */
+function PointsControl({
+  attemptId,
+  question: q,
+  onChanged,
+}: {
+  attemptId: string;
+  question: InstructorQuestionDetail;
+  onChanged: () => void;
+}) {
+  const [points, setPoints] = useState(String(q.pending ? (q.suggestion?.points ?? '') : q.pointsAwarded));
+  const [busy, setBusy] = useState(false);
+  const value = Number(points);
+  const usable = points.trim() !== '' && Number.isFinite(value) && value >= 0 && value <= q.maxPoints;
+  const save = () => {
+    setBusy(true);
+    instructorApi
+      .setPoints(attemptId, q.questionId, value)
+      .then(onChanged)
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="grade-control">
+      {q.suggestion && (
+        <p className="small">
+          <strong>
+            AI suggests {q.suggestion.points}/{q.maxPoints}:
+          </strong>{' '}
+          {q.suggestion.reasoning}
+        </p>
+      )}
+      <span className="action-row grade-points">
+        <label className="small">
+          Points{' '}
+          <input type="number" min={0} max={q.maxPoints} step={0.5} value={points} onChange={(e) => setPoints(e.target.value)} />
+        </label>
+        <span className="muted small">/{q.maxPoints}</span>
+        <button type="button" className="small-button" disabled={busy || !usable} onClick={save}>
+          {q.pending ? 'Save grade' : 'Update grade'}
+        </button>
+        {q.pending && <span className="badge badge-warn">Needs grading</span>}
+      </span>
+    </div>
+  );
+}
+
 function GradeControl({
   attemptId,
   finished,
@@ -157,6 +204,9 @@ function GradeControl({
 }) {
   const [busy, setBusy] = useState(false);
   if (!finished) return <p className="muted small">You can change this grade after the student finishes.</p>;
+  if (q.answerKey?.type === 'short_answer') {
+    return q.studentAnswer === null ? null : <PointsControl key={q.pointsAwarded} attemptId={attemptId} question={q} onChanged={onChanged} />;
+  }
   const set = (correct: boolean | null) => {
     setBusy(true);
     instructorApi
@@ -198,6 +248,14 @@ function GradeControl({
 function WrittenAnswerReview({ question: q }: { question: InstructorQuestionDetail }) {
   const key = q.answerKey!;
   if (q.studentAnswer === null) return <p className="muted">The student did not answer.</p>;
+  if (key.type === 'short_answer') {
+    return (
+      <div>
+        <strong>Student's answer:</strong>
+        <p className="student-answer">{printable(q.studentAnswer)}</p>
+      </div>
+    );
+  }
   const given = key.type === 'multiple_choice' ? (key.choices[Number(q.studentAnswer)] ?? q.studentAnswer) : q.studentAnswer;
   return (
     <p>
@@ -224,8 +282,8 @@ function QuestionSection({
           <h3>
             {q.number}. {q.title}
           </h3>
-          <span className={q.passed ? 'pass' : 'fail'}>
-            {q.passed ? '✓' : '✗'} {q.pointsAwarded}/{q.maxPoints} points
+          <span className={q.passed ? 'pass' : q.partial ? 'partial' : q.pending ? 'muted' : 'fail'}>
+            {q.pending ? '⏳ needs grading,' : q.passed ? '✓' : q.partial ? '◐' : '✗'} {q.pointsAwarded}/{q.maxPoints} points
           </span>
         </div>
         <p>

@@ -18,7 +18,15 @@ import { printable } from './format';
 import { EMPTY_QUESTION, QuestionForm } from './QuestionForm';
 import { EMPTY_WRITTEN_QUESTION, WrittenQuestionForm } from './WrittenQuestionForm';
 
-export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () => void }) {
+export function ExamEditorPage({
+  examId,
+  onBack,
+  onOpenPage,
+}: {
+  examId: string;
+  onBack: () => void;
+  onOpenPage: (page: 'analysis' | 'grading') => void;
+}) {
   const [exam, setExam] = useState<ExamDetail | null>(null);
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +112,14 @@ export function ExamEditorPage({ examId, onBack }: { examId: string; onBack: () 
           </h2>
           <span className="action-row">
             <OpenBadge exam={exam} />
+            <button type="button" className="secondary" onClick={() => onOpenPage('analysis')}>
+              Question analysis
+            </button>
+            {exam.questions.some((q) => q.content.answer?.type === 'short_answer') && (
+              <button type="button" className="secondary" onClick={() => onOpenPage('grading')}>
+                Grade short answers
+              </button>
+            )}
             {exam.enabled ? (
               <button type="button" className="secondary" onClick={() => void act(() => instructorApi.setExamEnabled(exam.id, false))}>
                 Disable (hide from students)
@@ -334,6 +350,20 @@ function QuestionCard(props: {
 
 /** The correct answer of a written question, for the instructor. */
 export function AnswerKeyView({ answer }: { answer: AnswerKey }) {
+  if (answer.type === 'short_answer') {
+    return (
+      <div className="small">
+        <p>
+          <strong>Short answer. Rubric:</strong> {answer.rubric}
+        </p>
+        {answer.sampleAnswer && (
+          <p>
+            <strong>Sample answer:</strong> {answer.sampleAnswer}
+          </p>
+        )}
+      </div>
+    );
+  }
   if (answer.type === 'fill_in_blank') {
     return (
       <p className="small">
@@ -408,7 +438,7 @@ function GeneratePanel({ examId, ai, written, onDone }: { examId: string; ai: Ai
       <h3>Write questions with AI</h3>
       <p className="muted small">
         {written
-          ? 'AI drafts a mix of multiple choice and fill-in-the-blank questions on any subject. Nothing reaches students until you approve it.'
+          ? 'AI drafts a mix of multiple choice and fill-in-the-blank questions on any subject (ask for short answer in the notes if you want some). Nothing reaches students until you approve it.'
           : 'AI drafts the questions, the platform test-runs each one in a sandbox, and nothing reaches students until you approve it.'}
       </p>
       <form onSubmit={(e) => void submit(e)}>
@@ -544,6 +574,7 @@ function SettingsEditor({
         </label>
         <div className="checkbox-row">
           <label>{flag('allowHints')} Show hints</label>
+          {written && <label>{flag('shuffle')} Shuffle questions and choices for each student</label>}
           {!written && (
             <>
               <label>{flag('showFeedback')} Show right/wrong after each submit</label>

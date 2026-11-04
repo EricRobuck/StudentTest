@@ -27,6 +27,7 @@ export const writtenSettings: ExamSettings = {
   limitedTries: false,
   partialCredit: false,
   examType: 'written',
+  shuffle: true,
 };
 
 /** Strict settings for trying exam mode: SAMPLE_EXAM_MODE=exam. */

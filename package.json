@@ -27,6 +27,7 @@
     "smoke:partial": "npm run smoke:partial -w @linuxlab/server --",
     "smoke:written": "npm run smoke:written -w @linuxlab/server --",
     "smoke:professors": "npm run smoke:professors -w @linuxlab/server --",
+    "smoke:shortanswer": "npm run smoke:shortanswer -w @linuxlab/server --",
     "smoke:authoring": "npm run smoke:authoring -w @linuxlab/server --",
     "commands:show": "npm run commands:show -w @linuxlab/server --",
     "ai:try": "npm run ai:try -w @linuxlab/server --",

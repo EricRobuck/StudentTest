@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from 'express';
-import type { AttemptDetail, AttemptSummary, InstructorStatus } from '@linuxlab/shared';
+import type { AttemptDetail, AttemptSummary, ExamAnalysis, GradingQueue, InstructorStatus } from '@linuxlab/shared';
 import { config } from '../config.js';
 import { sendError } from '../http/errors.js';
 import { INSTRUCTOR_COOKIE, instructorOf, requireInstructor } from '../http/requireInstructor.js';
@@ -7,10 +7,12 @@ import { clientAddress } from '../http/rateLimit.js';
 import { readCookie, requireAllowedOrigin } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
 import { FIRST_ADMIN_USERNAME, toMe, type InstructorAuth } from '../modules/instructor/instructorAuth.js';
+import { GenerationError } from '../modules/authoring/questionGenerator.js';
 import type { InstructorService } from '../modules/instructor/instructorService.js';
 
 const ATTEMPT_ID = /^[0-9a-f-]{36}$/;
 const QUESTION_ID = /^[A-Za-z0-9_-]{1,100}$/;
+const EXAM_ID = /^[A-Za-z0-9_-]{1,100}$/;
 
 export function instructorRouter(
   auth: InstructorAuth,
@@ -124,16 +126,64 @@ export function instructorRouter(
   router.put('/instructor/attempts/:attemptId/questions/:questionId/grade', sameOrigin, instructorOnly, ownAttempt, async (req, res, next) => {
     const attemptId = String(req.params.attemptId);
     const questionId = String(req.params.questionId);
-    const correct: unknown = (req.body as { correct?: unknown } | undefined)?.correct;
-    if (!ATTEMPT_ID.test(attemptId) || !QUESTION_ID.test(questionId) || (typeof correct !== 'boolean' && correct !== null)) {
-      return sendError(res, 400, 'BAD_REQUEST', 'correct must be true, false or null');
+    const { correct, points } = (req.body ?? {}) as { correct?: unknown; points?: unknown };
+    const valid = typeof points === 'number' || typeof correct === 'boolean' || correct === null;
+    if (!ATTEMPT_ID.test(attemptId) || !QUESTION_ID.test(questionId) || !valid) {
+      return sendError(res, 400, 'BAD_REQUEST', 'Send points, or correct as true, false or null');
     }
     try {
-      const outcome = await attempts.setGradeOverride(attemptId, questionId, correct);
+      const outcome = await attempts.setGradeOverride(
+        attemptId,
+        questionId,
+        typeof points === 'number' ? { points } : { correct: correct as boolean | null },
+      );
+      if (outcome === 'invalid-points') return sendError(res, 400, 'INVALID_POINTS', "Points must be between 0 and the question's maximum.");
       if (outcome === 'not-found') return sendError(res, 404, 'NOT_FOUND', 'Attempt or question not found');
       if (outcome === 'in-progress') return sendError(res, 409, 'IN_PROGRESS', 'Grades can be changed after the student finishes.');
       res.status(204).end();
     } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/instructor/exams/:examId/analysis — how each question went. Only this
+  // professor's attempts are counted, so anyone else's test simply comes back empty.
+  router.get('/instructor/exams/:examId/analysis', instructorOnly, async (req, res, next) => {
+    const examId = String(req.params.examId);
+    if (!EXAM_ID.test(examId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid exam id');
+    try {
+      const body: ExamAnalysis = await service.examAnalysis(examId, instructorOf(res).id);
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/instructor/exams/:examId/grading — this professor's short answers on a test.
+  router.get('/instructor/exams/:examId/grading', instructorOnly, async (req, res, next) => {
+    const examId = String(req.params.examId);
+    if (!EXAM_ID.test(examId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid exam id');
+    try {
+      const body: GradingQueue = await service.gradingQueue(examId, instructorOf(res).id);
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/instructor/exams/:examId/questions/:questionId/suggest-grades — AI suggestions.
+  router.post('/instructor/exams/:examId/questions/:questionId/suggest-grades', sameOrigin, instructorOnly, async (req, res, next) => {
+    const examId = String(req.params.examId);
+    const questionId = String(req.params.questionId);
+    if (!EXAM_ID.test(examId) || !QUESTION_ID.test(questionId)) return sendError(res, 400, 'BAD_REQUEST', 'Invalid id');
+    try {
+      const outcome = await service.suggestGrades(examId, questionId, instructorOf(res).id);
+      if (outcome === 'disabled') return sendError(res, 503, 'AI_DISABLED', 'AI grading is not set up: add OPENAI_API_KEY to the .env file.');
+      if (outcome === 'busy') return sendError(res, 429, 'BUSY', 'AI is already grading. Please wait for it to finish.');
+      if (outcome === 'not-found') return sendError(res, 404, 'NOT_FOUND', 'No short answers found for that question.');
+      res.json(outcome);
+    } catch (err) {
+      if (err instanceof GenerationError) return sendError(res, 502, 'AI_FAILED', err.message);
       next(err);
     }
   });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { effectiveMaxAttempts, isWrittenExam, usesLimitedTries, type StudentAnswerFormat, type StudentExam, type StudentQuestion } from '@linuxlab/shared';
 import type { AttemptRecord } from '../db/index.js';
 import type { ExamCatalog } from './examCatalog.js';
@@ -50,14 +51,39 @@ export function orderedQuestions(exam: ExamDefinition): QuestionDefinition[] {
  * The only way exam data reaches a student. Builds the view field by field
  * (an allow-list), so answers, setup, and model solutions can never leak.
  */
-/** Only the choices: which one is correct stays on the server. */
-function studentAnswerFormat(q: QuestionDefinition): StudentAnswerFormat | undefined {
-  if (!q.answer) return undefined;
-  return q.answer.type === 'multiple_choice' ? { type: 'multiple_choice', choices: q.answer.choices } : { type: 'fill_in_blank' };
+/** The same seed always gives the same order, so a student's order survives a refresh. */
+function seededShuffle<T>(items: readonly T[], seed: string): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const roll = createHash('sha256').update(`${seed}:${i}`).digest().readUInt32BE(0);
+    const j = roll % (i + 1);
+    [result[i], result[j]] = [result[j]!, result[i]!];
+  }
+  return result;
 }
 
-export function toStudentExam(exam: ExamDefinition): StudentExam {
-  const questions: StudentQuestion[] = orderedQuestions(exam).map((q, index) => ({
+function isShuffled(exam: ExamDefinition): boolean {
+  return isWrittenExam(exam.settings) && exam.settings.shuffle === true;
+}
+
+/** The questions in the order this student sees them. */
+export function questionsForAttempt(exam: ExamDefinition, attemptId: string): QuestionDefinition[] {
+  const questions = orderedQuestions(exam);
+  return isShuffled(exam) ? seededShuffle(questions, attemptId) : questions;
+}
+
+/** Only the choices: which one is correct (and any rubric) stays on the server. */
+function studentAnswerFormat(exam: ExamDefinition, q: QuestionDefinition, attemptId: string): StudentAnswerFormat | undefined {
+  if (!q.answer) return undefined;
+  if (q.answer.type === 'fill_in_blank') return { type: 'fill_in_blank' };
+  if (q.answer.type === 'short_answer') return { type: 'short_answer' };
+  // Answers are saved as the choice's original position, so shuffling never affects grading.
+  const choices = q.answer.choices.map((text, i) => ({ value: String(i), text }));
+  return { type: 'multiple_choice', choices: isShuffled(exam) ? seededShuffle(choices, `${attemptId}:${q.id}`) : choices };
+}
+
+export function toStudentExam(exam: ExamDefinition, attemptId: string): StudentExam {
+  const questions: StudentQuestion[] = questionsForAttempt(exam, attemptId).map((q, index) => ({
     id: q.id,
     number: index + 1,
     title: q.title,
@@ -67,7 +93,7 @@ export function toStudentExam(exam: ExamDefinition): StudentExam {
     category: q.category,
     difficulty: q.difficulty,
     hint: exam.settings.allowHints ? q.hint : undefined,
-    answerFormat: studentAnswerFormat(q),
+    answerFormat: studentAnswerFormat(exam, q, attemptId),
   }));
   const s = exam.settings;
   return {

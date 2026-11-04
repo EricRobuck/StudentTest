@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   report(started.status === 200 && started.body.attemptStatus === 'in_progress', 'Student starts the test');
   const view = await s.call<StudentExam>('GET', '/api/exam');
   const raw = JSON.stringify(view.body);
-  report(view.body.examType === 'written' && view.body.questions[0]?.answerFormat?.type === 'multiple_choice', 'Student gets the test and the choices');
+  report(view.body.examType === 'written' && view.body.questions.find((x) => x.id === qm.id)?.answerFormat?.type === 'multiple_choice', 'Student gets the test and the choices');
   report(!raw.includes('correctIndex') && !raw.includes('accepted') && !raw.includes(SECRET_ANSWER) && !raw.includes('Never shown'), 'Correct answers are not sent to the student', raw);
 
   const term = openTerminal(base, { Origin: ORIGIN, Cookie: s.cookie });

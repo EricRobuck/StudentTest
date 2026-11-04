@@ -12,7 +12,7 @@ import {
   type StudentInfo,
 } from '@linuxlab/shared';
 import type { AttemptRecord, Repositories, SubmissionRecord } from '../db/index.js';
-import { orderedQuestions } from '../exams/examService.js';
+import { orderedQuestions, questionsForAttempt } from '../exams/examService.js';
 import type { ExamDefinition } from '../exams/types.js';
 
 // Scoring rules (one place, used by every endpoint):
@@ -32,7 +32,7 @@ export type SubmitBlock = 'completed' | 'locked' | 'no-attempts-left' | 'test-lo
 export interface AttemptWork {
   submissions: SubmissionRecord[];
   answers: Map<string, string>;
-  overrides: Map<string, boolean>;
+  overrides: Map<string, { correct: boolean; points: number | null }>;
 }
 
 export type SaveAnswerOutcome =
@@ -55,8 +55,9 @@ export class AttemptService {
   async start(exam: ExamDefinition, student: StudentInfo, now = new Date()): Promise<AttemptRecord> {
     const questions = orderedQuestions(exam);
     const limit = exam.settings.timeLimitMinutes;
+    const id = randomUUID();
     const attempt: AttemptRecord = {
-      id: randomUUID(),
+      id,
       examId: exam.id,
       studentId: null,
       studentName: student.name,
@@ -66,7 +67,7 @@ export class AttemptService {
       startedAt: now.toISOString(),
       deadlineAt: limit === null ? null : new Date(now.getTime() + limit * 60_000).toISOString(),
       completedAt: null,
-      currentQuestionId: questions[0]?.id ?? null,
+      currentQuestionId: questionsForAttempt(exam, id)[0]?.id ?? null,
       // Frozen copy: later edits to the exam never change this attempt.
       examSnapshot: exam,
       lockedAt: null,
@@ -162,7 +163,7 @@ export class AttemptService {
     return {
       submissions,
       answers: new Map(answers.map((a) => [a.questionId, a.answer])),
-      overrides: new Map(overrides.map((o) => [o.questionId, o.correct])),
+      overrides: new Map(overrides.map((o) => [o.questionId, { correct: o.correct, points: o.points }])),
     };
   }
 
@@ -173,7 +174,8 @@ export class AttemptService {
     if (attempt.status !== 'in_progress') return { ok: false, reason: 'completed' };
     if (attempt.lockedAt) return { ok: false, reason: 'test-locked' };
     const answer = raw.trim();
-    if (answer.length > AUTHORING_LIMITS.answerMax) return { ok: false, reason: 'invalid' };
+    const limit = question.answer.type === 'short_answer' ? AUTHORING_LIMITS.shortAnswerMax : AUTHORING_LIMITS.answerMax;
+    if (answer.length > limit) return { ok: false, reason: 'invalid' };
     if (answer && question.answer.type === 'multiple_choice') {
       const inRange = /^\d{1,2}$/.test(answer) && Number(answer) < question.answer.choices.length;
       if (!inRange) return { ok: false, reason: 'invalid' };
@@ -183,13 +185,26 @@ export class AttemptService {
   }
 
   /** The instructor marks a question of a finished attempt correct or not correct (null = automatic grade). */
-  async setGradeOverride(attemptId: string, questionId: string, correct: boolean | null): Promise<'ok' | 'not-found' | 'in-progress'> {
+  async setGradeOverride(
+    attemptId: string,
+    questionId: string,
+    grade: { correct: boolean | null } | { points: number },
+  ): Promise<'ok' | 'not-found' | 'in-progress' | 'invalid-points'> {
     const attempt = await this.get(attemptId);
     const exam = attempt && this.examFor(attempt);
-    if (!attempt || !exam?.questions.some((q) => q.id === questionId)) return 'not-found';
+    const question = exam?.questions.find((q) => q.id === questionId);
+    if (!attempt || !question) return 'not-found';
     if (attempt.status !== 'completed') return 'in-progress';
-    await this.repos.attempts.setOverride(attemptId, questionId, correct, new Date().toISOString());
-    console.log(`[audit] attempt ${attemptId} question ${questionId}: instructor set ${correct === null ? 'automatic grade' : correct ? 'correct' : 'not correct'}`);
+    const at = new Date().toISOString();
+    if ('points' in grade) {
+      if (!Number.isFinite(grade.points) || grade.points < 0 || grade.points > question.points) return 'invalid-points';
+      const points = round2(grade.points);
+      await this.repos.attempts.setOverride(attemptId, questionId, points >= question.points, at, points);
+      console.log(`[audit] attempt ${attemptId} question ${questionId}: instructor gave ${points}/${question.points} points`);
+    } else {
+      await this.repos.attempts.setOverride(attemptId, questionId, grade.correct, at);
+      console.log(`[audit] attempt ${attemptId} question ${questionId}: instructor set ${grade.correct === null ? 'automatic grade' : grade.correct ? 'correct' : 'not correct'}`);
+    }
     return 'ok';
   }
 
@@ -237,7 +252,8 @@ export class AttemptService {
     const question = exam.questions.find((q) => q.id === questionId);
     const override = work.overrides.get(questionId);
     if (override !== undefined) {
-      return { passed: override, points: override ? (question?.points ?? 0) : 0, partial: false, final: true, submitted: true };
+      const points = override.points ?? (override.correct ? (question?.points ?? 0) : 0);
+      return { passed: override.correct, points, partial: !override.correct && points > 0, pending: false, final: true, submitted: true };
     }
     if (question?.answer) {
       const answer = work.answers.get(questionId);
@@ -246,6 +262,8 @@ export class AttemptService {
         passed: correct,
         points: correct ? question.points : 0,
         partial: false,
+        // A short answer counts for nothing until the instructor grades it.
+        pending: question.answer.type === 'short_answer' && answer !== undefined,
         final: attempt.status === 'completed',
         submitted: answer !== undefined,
       };
@@ -260,7 +278,7 @@ export class AttemptService {
       points = Math.max(points, value);
     }
     points = round2(points);
-    return { passed, points, partial: !passed && points > 0, final, submitted: mine.length > 0 };
+    return { passed, points, partial: !passed && points > 0, pending: false, final, submitted: mine.length > 0 };
   }
 
   private noTriesLeft(exam: ExamDefinition, count: number): boolean {
@@ -279,7 +297,7 @@ export class AttemptService {
         attempts: work.answers.has(questionId) ? 1 : 0,
         attemptsRemaining: null,
         locked: over || attempt.lockedAt !== null,
-        best: over && result.submitted ? { passed: result.passed, pointsAwarded: result.points, partial: false } : null,
+        best: over && result.submitted ? { passed: result.passed, pointsAwarded: result.points, partial: result.partial, pending: result.pending } : null,
       };
     }
     const subs = work.submissions;
@@ -328,6 +346,7 @@ export class AttemptService {
   async result(exam: ExamDefinition, attempt: AttemptRecord): Promise<ExamResultView> {
     const work = await this.work(attempt.id);
     const score = this.score(exam, attempt, work);
+    const questions = questionsForAttempt(exam, attempt.id);
     return {
       examTitle: exam.title,
       studentName: attempt.studentName,
@@ -338,7 +357,8 @@ export class AttemptService {
       score,
       percentage: score.max === 0 ? 0 : Math.round((score.earned / score.max) * 1000) / 10,
       canRetake: exam.settings.mode === 'practice',
-      questions: orderedQuestions(exam).map((q, i) => {
+      pendingCount: questions.filter((q) => this.questionResult(exam, attempt, q.id, work).pending).length,
+      questions: questions.map((q, i) => {
         const r = this.questionResult(exam, attempt, q.id, work);
         return {
           questionId: q.id,
@@ -348,6 +368,7 @@ export class AttemptService {
           maxPoints: q.points,
           passed: r.passed,
           partial: r.partial,
+          pending: r.pending,
           attempts: this.progress(exam, attempt, work, q.id).attempts,
         };
       }),
@@ -360,6 +381,8 @@ export interface QuestionResult {
   points: number;
   /** Not fully correct, but earned partial credit. */
   partial: boolean;
+  /** A short answer the instructor hasn't graded yet. */
+  pending: boolean;
   /** No more tries can change the result (correct, out of tries, or exam over). */
   final: boolean;
   submitted: boolean;

@@ -232,4 +232,22 @@ export const migrations: Migration[] = [
       CREATE INDEX exam_attempts_owner ON exam_attempts(owner_id);
     `,
   },
+  {
+    version: 10,
+    name: 'graded points, and AI grade suggestions',
+    sql: `
+      -- Points given by hand (null = full or no points, from "correct").
+      ALTER TABLE grade_overrides ADD COLUMN points REAL;
+
+      CREATE TABLE grade_suggestions (
+        attempt_id  TEXT NOT NULL REFERENCES exam_attempts(id),
+        question_id TEXT NOT NULL,
+        points      REAL NOT NULL,
+        reasoning   TEXT NOT NULL,
+        model       TEXT NOT NULL,
+        at          TEXT NOT NULL,
+        PRIMARY KEY (attempt_id, question_id)
+      );
+    `,
+  },
 ];

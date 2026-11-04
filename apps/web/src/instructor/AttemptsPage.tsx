@@ -5,7 +5,13 @@ import { formatDateTime } from './format';
 
 const AUTO_REFRESH_MS = 10_000;
 
-export function AttemptsPage({ onOpen }: { onOpen: (attemptId: string) => void }) {
+export function AttemptsPage({
+  onOpen,
+  onExamPage,
+}: {
+  onOpen: (attemptId: string) => void;
+  onExamPage: (examId: string, page: 'analysis' | 'grading') => void;
+}) {
   const [attempts, setAttempts] = useState<AttemptSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -87,7 +93,7 @@ export function AttemptsPage({ onOpen }: { onOpen: (attemptId: string) => void }
           for leaving the test screen. Go to the student, then click <em>Unlock</em> to let them continue.
         </p>
       )}
-      <TestStats attempts={attempts.filter((a) => (!examFilter || a.examTitle === examFilter) && (!classFilter || a.className === classFilter))} />
+      <TestStats attempts={attempts.filter((a) => (!examFilter || a.examTitle === examFilter) && (!classFilter || a.className === classFilter))} onExamPage={onExamPage} />
       <div className="filters">
         <label>
           Test{' '}
@@ -180,6 +186,7 @@ export function AttemptsPage({ onOpen }: { onOpen: (attemptId: string) => void }
                 <td>{a.examTitle}</td>
                 <td>
                   <StatusBadge summary={a} />
+                  {a.pendingGrades > 0 && <span className="badge badge-warn"> {a.pendingGrades} to grade</span>}
                   {isLocked(a) && <UnlockButton attemptId={a.id} onUnlocked={() => setReloadKey((n) => n + 1)} />}
                 </td>
                 <td className="num">
@@ -221,23 +228,33 @@ function round1(n: number): number {
 }
 
 /** Mean, high and low of each test, from the attempts that are finished. */
-function TestStats({ attempts }: { attempts: AttemptSummary[] }) {
+function TestStats({
+  attempts,
+  onExamPage,
+}: {
+  attempts: AttemptSummary[];
+  onExamPage: (examId: string, page: 'analysis' | 'grading') => void;
+}) {
   const titles = [...new Set(attempts.map((a) => a.examTitle))];
   const rows = titles
     .map((title) => {
       const mine = attempts.filter((a) => a.examTitle === title);
-      const done = mine.filter((a) => a.status === 'completed');
+      const over = mine.filter((a) => a.status === 'completed');
+      // An attempt still being graded would drag the numbers down: leave it out until it's done.
+      const done = over.filter((a) => a.pendingGrades === 0);
       const scores = done.map((a) => a.percentage);
       return {
         title,
+        examId: mine[0]!.examId,
         finished: done.length,
-        stillTaking: mine.length - done.length,
+        toGrade: over.length - done.length,
+        stillTaking: mine.length - over.length,
         mean: scores.length ? round1(scores.reduce((sum, s) => sum + s, 0) / scores.length) : 0,
         high: scores.length ? Math.max(...scores) : 0,
         low: scores.length ? Math.min(...scores) : 0,
       };
     })
-    .filter((r) => r.finished > 0);
+    .filter((r) => r.finished > 0 || r.toGrade > 0);
   if (rows.length === 0) return null;
   return (
     <div className="panel test-stats">
@@ -250,6 +267,7 @@ function TestStats({ attempts }: { attempts: AttemptSummary[] }) {
             <th scope="col" className="num">Mean</th>
             <th scope="col" className="num">High</th>
             <th scope="col" className="num">Low</th>
+            <th scope="col">More</th>
           </tr>
         </thead>
         <tbody>
@@ -259,10 +277,23 @@ function TestStats({ attempts }: { attempts: AttemptSummary[] }) {
               <td className="num">
                 {r.finished}
                 {r.stillTaking > 0 && <span className="muted small"> ({r.stillTaking} still taking it)</span>}
+                {r.toGrade > 0 && <span className="muted small"> ({r.toGrade} waiting for grading, not counted)</span>}
               </td>
-              <td className="num">{r.mean}%</td>
-              <td className="num">{r.high}%</td>
-              <td className="num">{r.low}%</td>
+              <td className="num">{r.finished > 0 ? `${r.mean}%` : '—'}</td>
+              <td className="num">{r.finished > 0 ? `${r.high}%` : '—'}</td>
+              <td className="num">{r.finished > 0 ? `${r.low}%` : '—'}</td>
+              <td>
+                <span className="action-row">
+                  <button type="button" className="link-button" onClick={() => onExamPage(r.examId, 'analysis')}>
+                    Question analysis
+                  </button>
+                  {r.toGrade > 0 && (
+                    <button type="button" className="link-button" onClick={() => onExamPage(r.examId, 'grading')}>
+                      Grade answers
+                    </button>
+                  )}
+                </span>
+              </td>
             </tr>
           ))}
         </tbody>

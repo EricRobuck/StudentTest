@@ -133,6 +133,16 @@ Choose the type when you create a test under **Exams**. It can't be changed late
   the student finishes. Fill-in-the-blank grading ignores capitals and extra
   spaces. Students see their results when the test is over.
 
+Written questions can also be **short answer**: you write a rubric, and the
+student's answer waits for grading (it counts as 0 until graded). On **Grade
+short answers**, you grade one question across all students. AI can suggest
+points and a reason, but nothing counts until you accept or change it; only the
+question, rubric and answers go to OpenAI, never student names.
+
+New written tests **shuffle** questions and choices per student; it's a checkbox
+in Exam settings. **Question analysis** shows how each question went: the share
+correct, what students picked, and the most common wrong answers.
+
 In **Student attempts**, open a finished attempt to review it and mark any
 question correct or not correct (for either type); scores update immediately.
 The **Test results** table there shows each test's mean, high and low from

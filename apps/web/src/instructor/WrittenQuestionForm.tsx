@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { AUTHORING_LIMITS, validateQuestionContent, type AnswerKey, type Difficulty, type QuestionContent } from '@linuxlab/shared';
 
-// Form for one written-test question: multiple choice or fill in the blank.
+// Form for one written-test question: multiple choice, fill in the blank or short answer.
 
 export const EMPTY_WRITTEN_QUESTION: QuestionContent = {
   title: '',
@@ -69,12 +69,15 @@ export function WrittenQuestionForm({ initial, submitLabel, onSubmit, onCancel }
               setKey(
                 e.target.value === 'fill_in_blank'
                   ? { type: 'fill_in_blank', accepted: [] }
-                  : { type: 'multiple_choice', choices: ['', '', '', ''], correctIndex: 0 },
+                  : e.target.value === 'short_answer'
+                    ? { type: 'short_answer', rubric: '' }
+                    : { type: 'multiple_choice', choices: ['', '', '', ''], correctIndex: 0 },
               )
             }
           >
             <option value="multiple_choice">Multiple choice</option>
             <option value="fill_in_blank">Fill in the blank</option>
+            <option value="short_answer">Short answer (you grade it, AI can suggest)</option>
           </select>
         </label>
         <label>
@@ -136,6 +139,28 @@ export function WrittenQuestionForm({ initial, submitLabel, onSubmit, onCancel }
             </button>
           )}
         </fieldset>
+      ) : key.type === 'short_answer' ? (
+        <>
+          <label>
+            Rubric: what earns the points (students never see this)
+            <textarea
+              rows={3}
+              maxLength={AUTHORING_LIMITS.rubricMax}
+              placeholder="e.g. 5 points for naming both devices; 5 points for explaining the difference between them"
+              value={key.rubric}
+              onChange={(e) => setKey({ ...key, rubric: e.target.value })}
+            />
+          </label>
+          <label>
+            Sample answer (optional, students never see this)
+            <textarea
+              rows={2}
+              maxLength={AUTHORING_LIMITS.rubricMax}
+              value={key.sampleAnswer ?? ''}
+              onChange={(e) => setKey({ ...key, sampleAnswer: e.target.value })}
+            />
+          </label>
+        </>
       ) : (
         <label>
           Accepted answers, one per line (capitals and extra spaces are ignored)

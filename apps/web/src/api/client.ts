@@ -13,8 +13,11 @@ import type {
   AttemptSummary,
   AttemptView,
   StartOptionsResponse,
+  ExamAnalysis,
   ExamResultView,
   ExamType,
+  GradingQueue,
+  SuggestGradesResult,
   HealthResponse,
   InstructorAccountSummary,
   InstructorMe,
@@ -147,6 +150,15 @@ export const instructorApi = {
     request<void>('PUT', `/api/instructor/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/grade`, {
       body: { correct },
     }),
+  /** Gives a question this many points (short answers). */
+  setPoints: (attemptId: string, questionId: string, points: number) =>
+    request<void>('PUT', `/api/instructor/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/grade`, {
+      body: { points },
+    }),
+  examAnalysis: (examId: string, signal?: AbortSignal) => request<ExamAnalysis>('GET', `${examPath(examId)}/analysis`, { signal }),
+  gradingQueue: (examId: string) => request<GradingQueue>('GET', `${examPath(examId)}/grading`),
+  suggestGrades: (examId: string, questionId: string) =>
+    request<SuggestGradesResult>('POST', `${questionPath(examId, questionId)}/suggest-grades`),
   deleteAttempt: (id: string) => request<void>('DELETE', `/api/instructor/attempts/${encodeURIComponent(id)}`),
   unlock: (id: string) => request<void>('POST', `/api/instructor/attempts/${encodeURIComponent(id)}/unlock`),
 

@@ -1070,3 +1070,62 @@ ul.plain {
   font-size: 0.95rem;
   color: var(--muted);
 }
+
+/* Short answers and grading */
+.answer-blank textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.6rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.student-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.grade-points input {
+  width: 4.5rem;
+}
+
+.row-ungraded td {
+  background: #fffbeb;
+}
+
+/* Question analysis */
+.analysis-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.analysis-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.bar {
+  height: 0.5rem;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+.bar-hard,
+.bar-wrong {
+  background: var(--warn);
+}
+
+.choice-bars li {
+  margin-bottom: 0.5rem;
+}

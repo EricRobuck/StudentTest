@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type { InstructorStatus } from '@linuxlab/shared';
 import { instructorApi } from '../api/client';
 import { AccountPage } from './AccountPage';
+import { AnalysisPage } from './AnalysisPage';
 import { AttemptDetailPage } from './AttemptDetailPage';
 import { AttemptsPage } from './AttemptsPage';
 import { ExamEditorPage } from './ExamEditorPage';
 import { ExamsPage } from './ExamsPage';
+import { GradingPage } from './GradingPage';
 import { LoginPage } from './LoginPage';
 import { ProfessorsPage } from './ProfessorsPage';
 
@@ -48,6 +50,7 @@ export function InstructorApp() {
 
   const attemptMatch = /^\/instructor\/attempts\/([0-9a-f-]{36})\/?$/.exec(path);
   const examMatch = /^\/instructor\/exams\/([A-Za-z0-9_-]{1,100})\/?$/.exec(path);
+  const examPageMatch = /^\/instructor\/exams\/([A-Za-z0-9_-]{1,100})\/(analysis|grading)\/?$/.exec(path);
   const onExams = path.startsWith('/instructor/exams');
   const onProfessors = path.startsWith('/instructor/professors');
   const onAccount = path.startsWith('/instructor/account');
@@ -69,11 +72,25 @@ export function InstructorApp() {
 
   let page;
   if (attemptMatch) page = <AttemptDetailPage attemptId={attemptMatch[1]!} onBack={() => navigate('/instructor')} />;
-  else if (examMatch) page = <ExamEditorPage examId={examMatch[1]!} onBack={() => navigate('/instructor/exams')} />;
+  else if (examPageMatch?.[2] === 'analysis') page = <AnalysisPage examId={examPageMatch[1]!} onBack={() => window.history.back()} />;
+  else if (examPageMatch?.[2] === 'grading') page = <GradingPage examId={examPageMatch[1]!} onBack={() => window.history.back()} />;
+  else if (examMatch) {
+    const examId = examMatch[1]!;
+    page = (
+      <ExamEditorPage examId={examId} onBack={() => navigate('/instructor/exams')} onOpenPage={(which) => navigate(`/instructor/exams/${examId}/${which}`)} />
+    );
+  }
   else if (onExams) page = <ExamsPage onOpen={(id) => navigate(`/instructor/exams/${id}`)} />;
   else if (onProfessors && me?.isAdmin) page = <ProfessorsPage myId={me.id} />;
   else if (onAccount && me) page = <AccountPage me={me} onChanged={refreshStatus} />;
-  else page = <AttemptsPage onOpen={(id) => navigate(`/instructor/attempts/${id}`)} />;
+  else {
+    page = (
+      <AttemptsPage
+        onOpen={(id) => navigate(`/instructor/attempts/${id}`)}
+        onExamPage={(examId, which) => navigate(`/instructor/exams/${examId}/${which}`)}
+      />
+    );
+  }
 
   return (
     <div className="instructor-layout">

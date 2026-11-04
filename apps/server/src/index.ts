@@ -3,6 +3,7 @@ import { TERMINAL_CLOSE } from '@linuxlab/shared';
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { AttemptService } from './modules/attempts/attemptService.js';
+import { AnswerGrader } from './modules/authoring/answerGrader.js';
 import { AuthoringService } from './modules/authoring/authoringService.js';
 import { QuestionGenerator } from './modules/authoring/questionGenerator.js';
 import { CommandLogService } from './modules/commandLog/commandLogService.js';
@@ -45,7 +46,7 @@ sessions.beforeExamEnvironmentRemoved((attemptId, sessionId, containerId) =>
   snapshots.capture(attemptId, sessionId, containerId),
 );
 
-const instructor = new InstructorService(repos, attempts, examForAttempt);
+const instructor = new InstructorService(repos, attempts, examForAttempt, new AnswerGrader(config.ai.model));
 const authoring = new AuthoringService(catalog, runtime, new QuestionGenerator(config.ai.model));
 
 // Instructor deletes an attempt: stop its environments (closing the student's

@@ -58,6 +58,7 @@ Rules for good questions:
 const WRITTEN_SYSTEM_PROMPT = `You write test questions for college students. Students answer on screen, on any subject the instructor names. There are two question formats:
 - multiple_choice: fill in "choices" with 2 to 6 distinct, plausible options and "correct_index" with the position of the only correct one, counting from 0. Leave "accepted_answers" empty.
 - fill_in_blank: the student types a short answer, usually one word or a short phrase. Fill in "accepted_answers" with every reasonable correct wording; capitals and extra spaces are ignored when grading. Leave "choices" empty and set "correct_index" to 0.
+- short_answer: the student writes a few sentences, and the instructor grades it. Fill in "rubric" with what earns the points and "sample_answer" with a good answer. Only use this format when the instructor asks for short answer questions. For the other two formats, leave both empty.
 
 Rules for good questions:
 - Use a mix of both formats unless the instructor asks otherwise.
@@ -76,16 +77,18 @@ const WRITTEN_OUTPUT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['title', 'text', 'category', 'difficulty', 'format', 'choices', 'correct_index', 'accepted_answers', 'hint', 'explanation'],
+        required: ['title', 'text', 'category', 'difficulty', 'format', 'choices', 'correct_index', 'accepted_answers', 'rubric', 'sample_answer', 'hint', 'explanation'],
         properties: {
           title: { type: 'string', description: 'Short title, a few words. Must not reveal the answer.' },
           text: { type: 'string', description: 'The question, addressed to the student.' },
           category: { type: 'string', description: 'Topic.' },
           difficulty: { type: 'string', enum: ['beginner', 'intermediate', 'advanced'] },
-          format: { type: 'string', enum: ['multiple_choice', 'fill_in_blank'] },
+          format: { type: 'string', enum: ['multiple_choice', 'fill_in_blank', 'short_answer'] },
           choices: { type: 'array', items: { type: 'string' } },
           correct_index: { type: 'integer' },
           accepted_answers: { type: 'array', items: { type: 'string' } },
+          rubric: { type: 'string' },
+          sample_answer: { type: 'string' },
           hint: { type: 'string' },
           explanation: { type: 'string' },
         },
@@ -191,6 +194,8 @@ interface RawDraft {
   choices?: unknown;
   correct_index?: unknown;
   accepted_answers?: unknown;
+  rubric?: unknown;
+  sample_answer?: unknown;
 }
 
 export class QuestionGenerator {
@@ -235,23 +240,7 @@ export class QuestionGenerator {
         text: { format: { type: 'json_schema', name: 'exam_questions', schema: options.written ? WRITTEN_OUTPUT_SCHEMA : OUTPUT_SCHEMA, strict: true } },
       });
     } catch (err) {
-      // OpenAI's own message (never contains the key) helps diagnose model/quota/schema problems.
-      if (err instanceof OpenAI.APIError) {
-        console.warn(`[ai] OpenAI error ${err.status ?? ''} (code ${err.code ?? '-'}, type ${err.type ?? '-'}): ${err.message}`);
-      }
-      if (err instanceof OpenAI.AuthenticationError) throw new GenerationError('The OpenAI API key was rejected. Check OPENAI_API_KEY in .env.');
-      if (err instanceof OpenAI.PermissionDeniedError) throw new GenerationError('The OpenAI API key is not allowed to use this model.');
-      if (err instanceof OpenAI.NotFoundError) throw new GenerationError(`The model "${this.model}" is not available to this API key.`);
-      if (err instanceof OpenAI.RateLimitError) {
-        throw new GenerationError(
-          err.type === 'insufficient_quota' || err.code === 'insufficient_quota' || err.code === 'credit_balance_exhausted'
-            ? 'Your OpenAI account has no API credits left. Add credits at platform.openai.com → Settings → Billing.'
-            : 'OpenAI rate limit reached. Try again in a minute.',
-        );
-      }
-      if (err instanceof OpenAI.APIConnectionError) throw new GenerationError('Could not reach the OpenAI API. Check the internet connection.');
-      if (err instanceof OpenAI.APIError) throw new GenerationError(`The OpenAI API returned an error (${err.status ?? 'unknown'}).`);
-      throw err;
+      throw toGenerationError(err, this.model);
     }
 
     const refused = response.output.some(
@@ -285,6 +274,27 @@ export class QuestionGenerator {
   }
 }
 
+/** Turns an OpenAI failure into a message that is safe and useful to show the instructor. */
+export function toGenerationError(err: unknown, model: string): Error {
+  // OpenAI's own message (never contains the key) helps diagnose model/quota/schema problems.
+  if (err instanceof OpenAI.APIError) {
+    console.warn(`[ai] OpenAI error ${err.status ?? ''} (code ${err.code ?? '-'}, type ${err.type ?? '-'}): ${err.message}`);
+  }
+  if (err instanceof OpenAI.AuthenticationError) return new GenerationError('The OpenAI API key was rejected. Check OPENAI_API_KEY in .env.');
+  if (err instanceof OpenAI.PermissionDeniedError) return new GenerationError('The OpenAI API key is not allowed to use this model.');
+  if (err instanceof OpenAI.NotFoundError) return new GenerationError(`The model "${model}" is not available to this API key.`);
+  if (err instanceof OpenAI.RateLimitError) {
+    return new GenerationError(
+      err.type === 'insufficient_quota' || err.code === 'insufficient_quota' || err.code === 'credit_balance_exhausted'
+        ? 'Your OpenAI account has no API credits left. Add credits at platform.openai.com → Settings → Billing.'
+        : 'OpenAI rate limit reached. Try again in a minute.',
+    );
+  }
+  if (err instanceof OpenAI.APIConnectionError) return new GenerationError('Could not reach the OpenAI API. Check the internet connection.');
+  if (err instanceof OpenAI.APIError) return new GenerationError(`The OpenAI API returned an error (${err.status ?? 'unknown'}).`);
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 /** Maps the AI's JSON for a written question onto QuestionContent (validated right after). */
 function toWrittenContent(raw: RawDraft, points: number): unknown {
   return {
@@ -298,7 +308,9 @@ function toWrittenContent(raw: RawDraft, points: number): unknown {
     answer:
       raw.format === 'multiple_choice'
         ? { type: 'multiple_choice', choices: raw.choices, correctIndex: raw.correct_index }
-        : { type: 'fill_in_blank', accepted: raw.accepted_answers },
+        : raw.format === 'short_answer'
+          ? { type: 'short_answer', rubric: raw.rubric, sampleAnswer: raw.sample_answer }
+          : { type: 'fill_in_blank', accepted: raw.accepted_answers },
   };
 }
 

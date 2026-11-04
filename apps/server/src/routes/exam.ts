@@ -39,7 +39,7 @@ export function examRouter({ sessions, attempts, runtime, limiters }: ExamRouteD
       const attempt = await attempts.get(sessionOf(res).attemptId);
       const exam = attempt && examForAttempt(attempt);
       if (!exam) return sendError(res, 404, 'NOT_FOUND', 'Exam not found');
-      const body: StudentExam = toStudentExam(exam);
+      const body: StudentExam = toStudentExam(exam, attempt.id);
       res.json(body);
     } catch (err) {
       next(err);

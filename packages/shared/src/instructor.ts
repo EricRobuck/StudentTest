@@ -82,6 +82,88 @@ export interface AttemptSummary {
   /** How many times the student left the test screen. */
   timesLeft: number;
   examType: ExamType;
+  /** Short answers still to be graded. */
+  pendingGrades: number;
+}
+
+/** What the AI thinks a short answer earned. Doesn't count until the instructor accepts it. */
+export interface GradeSuggestion {
+  points: number;
+  reasoning: string;
+  model: string;
+}
+
+/** One student's short answer on the grading page. */
+export interface GradingAnswer {
+  attemptId: string;
+  studentName: string | null;
+  className: string | null;
+  answer: string;
+  /** The grade given, or null while it still needs grading. */
+  points: number | null;
+  suggestion: GradeSuggestion | null;
+}
+
+export interface GradingQuestion {
+  questionId: string;
+  title: string;
+  text: string;
+  maxPoints: number;
+  rubric: string;
+  sampleAnswer: string | null;
+  answers: GradingAnswer[];
+}
+
+/** Response body of GET /api/instructor/exams/:id/grading. */
+export interface GradingQueue {
+  examTitle: string | null;
+  aiEnabled: boolean;
+  questions: GradingQuestion[];
+}
+
+/** Response body of POST .../suggest-grades. */
+export interface SuggestGradesResult {
+  suggested: number;
+  /** Answers still without a suggestion. */
+  remaining: number;
+}
+
+export type QuestionFormat = 'linux' | 'multiple_choice' | 'fill_in_blank' | 'short_answer';
+
+/** How one question went across all finished attempts. */
+export interface QuestionAnalysis {
+  questionId: string;
+  number: number;
+  title: string;
+  text: string;
+  format: QuestionFormat;
+  maxPoints: number;
+  /** Finished attempts that include this question. */
+  attempts: number;
+  /** Of those, how many answered it. */
+  answered: number;
+  /** Fully correct, counting grades changed by the instructor. */
+  correct: number;
+  /** Short answers not graded yet (left out of percentCorrect and averagePoints). */
+  pending: number;
+  /** 0..100 of the graded attempts; null if none are graded. */
+  percentCorrect: number | null;
+  averagePoints: number | null;
+  /** Multiple choice: how many picked each choice. */
+  choices?: Array<{ text: string; count: number; correct: boolean }>;
+  /** Fill in the blank: the most common wrong answers. */
+  wrongAnswers?: Array<{ answer: string; count: number }>;
+  /** Linux: how often each check passed on the last submission. */
+  checks?: Array<{ label: string; passed: number; total: number }>;
+  /** Linux: average submissions by students who submitted. */
+  averageTries?: number;
+}
+
+/** Response body of GET /api/instructor/exams/:id/analysis. */
+export interface ExamAnalysis {
+  examTitle: string | null;
+  finishedAttempts: number;
+  questions: QuestionAnalysis[];
 }
 
 /** A time the student left the test screen, or an unlock. */
@@ -132,6 +214,9 @@ export interface InstructorQuestionDetail {
   autoPassed: boolean;
   /** The instructor's decision (null = the automatic grade stands). */
   override: boolean | null;
+  /** A short answer that still needs grading. */
+  pending: boolean;
+  suggestion: GradeSuggestion | null;
   /** Written tests: the correct answer and what the student answered. */
   answerKey: AnswerKey | null;
   studentAnswer: string | null;

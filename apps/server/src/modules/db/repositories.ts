@@ -162,8 +162,10 @@ export interface AttemptRepository {
   saveAnswer(id: string, questionId: string, answer: string | null, at: string): Promise<void>;
   answers(id: string): Promise<Array<{ questionId: string; answer: string }>>;
   /** Records the instructor's decision on a question; null goes back to the automatic grade. */
-  setOverride(id: string, questionId: string, correct: boolean | null, at: string): Promise<void>;
-  overrides(id: string): Promise<Array<{ questionId: string; correct: boolean }>>;
+  setOverride(id: string, questionId: string, correct: boolean | null, at: string, points?: number): Promise<void>;
+  overrides(id: string): Promise<Array<{ questionId: string; correct: boolean; points: number | null }>>;
+  saveSuggestion(id: string, questionId: string, suggestion: { points: number; reasoning: string; model: string }, at: string): Promise<void>;
+  suggestions(id: string): Promise<Array<{ questionId: string; points: number; reasoning: string; model: string }>>;
   /** Permanently removes an attempt and everything recorded for it. False if it didn't exist. */
   delete(id: string): Promise<boolean>;
   /** Records who is taking an attempt that started without a name. */

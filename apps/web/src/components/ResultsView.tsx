@@ -58,6 +58,13 @@ export function ResultsView({ result, onStartOver, onTakeAnother }: ResultsViewP
         <span className="results-percent">{result.percentage}%</span>
       </div>
 
+      {result.pendingCount > 0 && (
+        <p className="result result-recorded" role="status">
+          Your instructor still needs to grade {result.pendingCount} short answer{result.pendingCount === 1 ? '' : 's'}, so this
+          score can go up. Those questions count as 0 until they are graded.
+        </p>
+      )}
+
       <table className="results-table">
         <thead>
           <tr>
@@ -75,8 +82,16 @@ export function ResultsView({ result, onStartOver, onTakeAnother }: ResultsViewP
               <td>
                 {q.number}. {q.title}
               </td>
-              <td className={q.passed ? 'pass' : q.partial ? 'partial' : 'fail'}>
-                {q.passed ? '✓ Correct' : q.attempts === 0 ? '— Not answered' : q.partial ? '◐ Partial credit' : '✗ Incorrect'}
+              <td className={q.passed ? 'pass' : q.partial ? 'partial' : q.pending ? 'muted' : 'fail'}>
+                {q.passed
+                  ? '✓ Correct'
+                  : q.pending
+                    ? '⏳ Waiting for grading'
+                    : q.partial
+                      ? '◐ Partial credit'
+                      : q.attempts === 0
+                        ? '— Not answered'
+                        : '✗ Incorrect'}
               </td>
               <td>{q.attempts}</td>
               <td className="num">

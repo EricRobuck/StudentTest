@@ -41,6 +41,8 @@ export interface ExamSettings {
   partialCredit?: boolean;
   /** Fixed when the test is created. Missing = 'linux'. */
   examType?: ExamType;
+  /** Written tests: each student gets their own order of questions and choices. Missing = false. */
+  shuffle?: boolean;
 }
 
 export function isWrittenExam(s: Pick<ExamSettings, 'examType'>): boolean {
@@ -180,6 +182,8 @@ export const AUTHORING_LIMITS = {
   choiceMax: 500,
   acceptedAnswersMax: 20,
   answerMax: 500,
+  shortAnswerMax: 5000,
+  rubricMax: 2000,
   topicMax: 500,
   notesMax: 1000,
 } as const;
@@ -344,7 +348,15 @@ function validateAnswerKey(r: Record<string, unknown>, errors: string[]): Answer
     if (accepted.some((a) => a.length > L.answerMax)) errors.push(`Accepted answers must be at most ${L.answerMax} characters.`);
     return { type: 'fill_in_blank', accepted };
   }
-  errors.push('Choose multiple choice or fill in the blank.');
+  if (r.type === 'short_answer') {
+    const rubric = typeof r.rubric === 'string' ? r.rubric.trim() : '';
+    const sampleAnswer = typeof r.sampleAnswer === 'string' ? r.sampleAnswer.trim() : '';
+    if (!rubric) errors.push('Write a rubric: what earns the points on this question.');
+    if (rubric.length > L.rubricMax) errors.push(`The rubric must be at most ${L.rubricMax} characters.`);
+    if (sampleAnswer.length > L.rubricMax) errors.push(`The sample answer must be at most ${L.rubricMax} characters.`);
+    return { type: 'short_answer', rubric, ...(sampleAnswer ? { sampleAnswer } : {}) };
+  }
+  errors.push('Choose multiple choice, fill in the blank or short answer.');
   return undefined;
 }
 
@@ -407,6 +419,7 @@ export function validateExamSettings(input: unknown): SettingsCheck {
     limitedTries: (raw.limitedTries ?? raw.threeTries) !== false,
     partialCredit: raw.partialCredit !== false,
     examType: raw.examType === 'written' ? 'written' : 'linux',
+    shuffle: raw.shuffle === true,
   };
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value };
 }

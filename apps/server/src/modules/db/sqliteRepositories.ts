@@ -199,26 +199,39 @@ export function createSqliteRepositories(db: Database): Repositories {
           .all(id)
           .map((r) => ({ questionId: str(r.question_id), answer: str(r.answer) }));
       },
-      async setOverride(id, questionId, correct, at) {
+      async setOverride(id, questionId, correct, at, points) {
         if (correct === null) {
           db.prepare('DELETE FROM grade_overrides WHERE attempt_id = ? AND question_id = ?').run(id, questionId);
           return;
         }
         db.prepare(
-          `INSERT INTO grade_overrides (attempt_id, question_id, correct, at) VALUES (?, ?, ?, ?)
-           ON CONFLICT (attempt_id, question_id) DO UPDATE SET correct = excluded.correct, at = excluded.at`,
-        ).run(id, questionId, correct ? 1 : 0, at);
+          `INSERT INTO grade_overrides (attempt_id, question_id, correct, at, points) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (attempt_id, question_id) DO UPDATE SET correct = excluded.correct, at = excluded.at, points = excluded.points`,
+        ).run(id, questionId, correct ? 1 : 0, at, points ?? null);
       },
       async overrides(id) {
         return db
-          .prepare('SELECT question_id, correct FROM grade_overrides WHERE attempt_id = ?')
+          .prepare('SELECT question_id, correct, points FROM grade_overrides WHERE attempt_id = ?')
           .all(id)
-          .map((r) => ({ questionId: str(r.question_id), correct: Number(r.correct) === 1 }));
+          .map((r) => ({ questionId: str(r.question_id), correct: Number(r.correct) === 1, points: r.points === null ? null : Number(r.points) }));
+      },
+      async saveSuggestion(id, questionId, s, at) {
+        db.prepare(
+          `INSERT INTO grade_suggestions (attempt_id, question_id, points, reasoning, model, at) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (attempt_id, question_id) DO UPDATE SET points = excluded.points, reasoning = excluded.reasoning,
+             model = excluded.model, at = excluded.at`,
+        ).run(id, questionId, s.points, s.reasoning, s.model, at);
+      },
+      async suggestions(id) {
+        return db
+          .prepare('SELECT question_id, points, reasoning, model FROM grade_suggestions WHERE attempt_id = ?')
+          .all(id)
+          .map((r) => ({ questionId: str(r.question_id), points: Number(r.points), reasoning: str(r.reasoning), model: str(r.model) }));
       },
       async delete(id) {
         return inTransaction(db, () => {
           // Children first: foreign keys are enforced and don't cascade.
-          for (const table of ['command_log', 'fs_snapshots', 'question_visits', 'submissions', 'attempt_questions', 'integrity_events', 'written_answers', 'grade_overrides', 'sessions']) {
+          for (const table of ['command_log', 'fs_snapshots', 'question_visits', 'submissions', 'attempt_questions', 'integrity_events', 'written_answers', 'grade_overrides', 'grade_suggestions', 'sessions']) {
             db.prepare(`DELETE FROM ${table} WHERE attempt_id = ?`).run(id);
           }
           return Number(db.prepare('DELETE FROM exam_attempts WHERE id = ?').run(id).changes) > 0;

@@ -194,16 +194,16 @@ function AnswerInput({
     return (
       <fieldset className="test-choice answer-choices">
         <legend className="sr-only">Choose one answer</legend>
-        {format.choices.map((choice, i) => (
-          <label key={i} className={`test-option ${value === String(i) ? 'selected' : ''}`}>
+        {format.choices.map((choice) => (
+          <label key={choice.value} className={`test-option ${value === choice.value ? 'selected' : ''}`}>
             <input
               type="radio"
               name={`answer-${question.id}`}
-              checked={value === String(i)}
-              onChange={() => onChange(String(i), true)}
+              checked={value === choice.value}
+              onChange={() => onChange(choice.value, true)}
             />
             <span>
-              <TaskText text={choice} />
+              <TaskText text={choice.text} />
             </span>
           </label>
         ))}
@@ -213,6 +213,22 @@ function AnswerInput({
           </button>
         )}
       </fieldset>
+    );
+  }
+  if (format?.type === 'short_answer') {
+    return (
+      <label className="answer-blank">
+        Write your answer
+        <textarea
+          rows={10}
+          maxLength={5000}
+          spellCheck
+          value={value}
+          onChange={(e) => onChange(e.target.value, false)}
+          onBlur={onBlur}
+          autoFocus
+        />
+      </label>
     );
   }
   return (
