@@ -23,7 +23,9 @@ const runtime = createDockerRuntime(config.containers);
 
 // Exams live in the database; load them before serving anyone.
 const catalog = new ExamCatalog(repos.exams);
-await catalog.load();
+const instructorAuth = new InstructorAuth(repos.instructors, catalog);
+await instructorAuth.bootstrap(config.security.instructorPassword);
+await catalog.load(instructorAuth.adminId);
 setExamCatalog(catalog);
 
 const attempts = new AttemptService(repos, examForAttempt);
@@ -43,7 +45,6 @@ sessions.beforeExamEnvironmentRemoved((attemptId, sessionId, containerId) =>
   snapshots.capture(attemptId, sessionId, containerId),
 );
 
-const instructorAuth = new InstructorAuth(config.security.instructorPassword);
 const instructor = new InstructorService(repos, attempts, examForAttempt);
 const authoring = new AuthoringService(catalog, runtime, new QuestionGenerator(config.ai.model));
 

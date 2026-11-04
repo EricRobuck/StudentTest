@@ -132,7 +132,10 @@ export function StartScreen({ onStarted, initial }: StartScreenProps) {
             </button>
           </div>
         ) : (
-          options.exams.map((exam) => (
+          [...new Set(options.exams.map((e) => e.professor))].sort((a, b) => a.localeCompare(b)).map((professor) => (
+            <div key={professor} className="test-group">
+              <h3 className="test-professor">{professor}</h3>
+              {options.exams.filter((e) => e.professor === professor).map((exam) => (
             <label key={exam.id} className={`test-option ${examId === exam.id ? 'selected' : ''}`}>
               <input type="radio" name="exam" value={exam.id} checked={examId === exam.id} onChange={() => setExamId(exam.id)} />
               <span>
@@ -147,6 +150,8 @@ export function StartScreen({ onStarted, initial }: StartScreenProps) {
                 {exam.description && <span className="muted small test-description">{exam.description}</span>}
               </span>
             </label>
+              ))}
+            </div>
           ))
         )}
         {errors.examId && (

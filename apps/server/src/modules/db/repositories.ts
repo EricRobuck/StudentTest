@@ -32,6 +32,8 @@ export interface AttemptRecord {
   /** Set when the student left the test screen; cleared when the instructor unlocks. */
   lockedAt: string | null;
   lockReason: string | null;
+  /** The professor whose test this is; only they can see this attempt. */
+  ownerId: string | null;
 }
 
 export interface IntegrityEventRecord {
@@ -40,8 +42,31 @@ export interface IntegrityEventRecord {
   at: string;
 }
 
+export interface InstructorRecord {
+  id: string;
+  username: string;
+  name: string;
+  /** Salted scrypt hash; never leaves the server. */
+  passwordHash: string;
+  isAdmin: boolean;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface InstructorRepository {
+  list(): Promise<InstructorRecord[]>;
+  get(id: string): Promise<InstructorRecord | undefined>;
+  /** Capitals don't matter. */
+  findByUsername(username: string): Promise<InstructorRecord | undefined>;
+  save(account: InstructorRecord): Promise<void>;
+  /** Gives every test and attempt without an owner to this instructor. */
+  adoptOwnerless(ownerId: string): Promise<void>;
+}
+
 export interface ExamRecord {
   id: string;
+  /** The professor who owns this test. */
+  ownerId: string | null;
   title: string;
   description: string | null;
   settings: ExamSettings;
@@ -190,4 +215,5 @@ export interface Repositories {
   commands: CommandLogRepository;
   snapshots: SnapshotRepository;
   exams: ExamRepository;
+  instructors: InstructorRepository;
 }

@@ -211,4 +211,25 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 9,
+    name: 'professor accounts; tests and attempts belong to a professor',
+    sql: `
+      CREATE TABLE instructors (
+        id            TEXT PRIMARY KEY,
+        username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        name          TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        is_admin      INTEGER NOT NULL CHECK (is_admin IN (0, 1)),
+        active        INTEGER NOT NULL CHECK (active IN (0, 1)),
+        created_at    TEXT NOT NULL
+      );
+
+      -- Null only until startup hands existing tests and attempts to the administrator.
+      ALTER TABLE exams ADD COLUMN owner_id TEXT REFERENCES instructors(id);
+      ALTER TABLE exam_attempts ADD COLUMN owner_id TEXT REFERENCES instructors(id);
+      CREATE INDEX exams_owner ON exams(owner_id);
+      CREATE INDEX exam_attempts_owner ON exam_attempts(owner_id);
+    `,
+  },
 ];

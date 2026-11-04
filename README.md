@@ -138,6 +138,16 @@ question correct or not correct (for either type); scores update immediately.
 The **Test results** table there shows each test's mean, high and low from
 finished attempts.
 
+## Professors
+
+Each professor has their own sign-in and sees only their own tests, students
+and grades. The first account, `admin`, is created from `INSTRUCTOR_PASSWORD`
+and owns everything from before accounts existed. That administrator adds
+professors under **Professors**, can reset their passwords, and can disable an
+account (their tests close to new students; their records are kept). Everyone
+sets their display name and password under **My account**. The start screen
+groups open tests by professor. All professors share one OpenAI key.
+
 ## Instructor pages
 
 Open http://127.0.0.1:5173/instructor. Access needs `INSTRUCTOR_PASSWORD`

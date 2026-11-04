@@ -26,6 +26,8 @@ export interface QuestionDefinition extends QuestionContent {
  */
 export interface ExamDefinition {
   id: string;
+  /** The professor who owns this test. */
+  ownerId?: string | null;
   title: string;
   description?: string;
   settings: ExamSettings;

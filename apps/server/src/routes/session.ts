@@ -6,6 +6,7 @@ import { clientAddress, sendRateLimited, type Limiters } from '../http/rateLimit
 import { requireSession, sessionOf } from '../http/requireSession.js';
 import { readCookie, requireAllowedOrigin, SESSION_COOKIE } from '../http/security.js';
 import type { AttemptService } from '../modules/attempts/attemptService.js';
+import type { InstructorAuth } from '../modules/instructor/instructorAuth.js';
 import { ContainerError } from '../modules/containers/index.js';
 import { examForAttempt, getOpenExams } from '../modules/exams/examService.js';
 import { ExamNotOpenError, type SessionManager, type SessionResult } from '../modules/sessions/sessionManager.js';
@@ -21,7 +22,7 @@ const EXAM_ID = /^[A-Za-z0-9_-]{1,100}$/;
 
 const NEW_SESSION_LIMIT_MESSAGE = 'Too many new exam sessions from your network. Please wait a few minutes.';
 
-export function sessionRouter(sessions: SessionManager, attempts: AttemptService, limiters: Limiters): Router {
+export function sessionRouter(sessions: SessionManager, attempts: AttemptService, limiters: Limiters, auth: InstructorAuth): Router {
   const router = Router();
   const sameOrigin = requireAllowedOrigin(config.security.allowedOrigins);
 
@@ -34,7 +35,13 @@ export function sessionRouter(sessions: SessionManager, attempts: AttemptService
 
   // GET /api/start-options — what the start screen offers: the class list
   // (null = students type their class) and the tests that are open right now.
-  router.get('/start-options', (_req, res) => {
+  router.get('/start-options', async (_req, res, next) => {
+    let names: Map<string, string>;
+    try {
+      names = await auth.professorNames();
+    } catch (err) {
+      return next(err);
+    }
     const body: StartOptionsResponse = {
       classes: config.classes,
       exams: getOpenExams().map((e) => ({
@@ -47,6 +54,7 @@ export function sessionRouter(sessions: SessionManager, attempts: AttemptService
         mode: e.settings.mode,
         lockOnLeave: e.settings.lockOnLeave !== false,
         examType: e.settings.examType === 'written' ? 'written' : 'linux',
+        professor: (e.ownerId && names.get(e.ownerId)) || 'Instructor',
       })),
     };
     res.json(body);

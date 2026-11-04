@@ -71,6 +71,7 @@ export class AttemptService {
       examSnapshot: exam,
       lockedAt: null,
       lockReason: null,
+      ownerId: exam.ownerId ?? null,
     };
     await this.repos.attempts.create(
       attempt,

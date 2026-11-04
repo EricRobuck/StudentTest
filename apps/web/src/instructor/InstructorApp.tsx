@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { InstructorStatus } from '@linuxlab/shared';
 import { instructorApi } from '../api/client';
+import { AccountPage } from './AccountPage';
 import { AttemptDetailPage } from './AttemptDetailPage';
 import { AttemptsPage } from './AttemptsPage';
 import { ExamEditorPage } from './ExamEditorPage';
 import { ExamsPage } from './ExamsPage';
 import { LoginPage } from './LoginPage';
+import { ProfessorsPage } from './ProfessorsPage';
 
 // Instructor area at /instructor. Two pages: the attempts list and one
 // attempt's detail (/instructor/attempts/<id>). A tiny history-based router
@@ -47,6 +49,9 @@ export function InstructorApp() {
   const attemptMatch = /^\/instructor\/attempts\/([0-9a-f-]{36})\/?$/.exec(path);
   const examMatch = /^\/instructor\/exams\/([A-Za-z0-9_-]{1,100})\/?$/.exec(path);
   const onExams = path.startsWith('/instructor/exams');
+  const onProfessors = path.startsWith('/instructor/professors');
+  const onAccount = path.startsWith('/instructor/account');
+  const me = status?.me ?? null;
 
   const link = (to: string, label: string, current: boolean) => (
     <a
@@ -66,6 +71,8 @@ export function InstructorApp() {
   if (attemptMatch) page = <AttemptDetailPage attemptId={attemptMatch[1]!} onBack={() => navigate('/instructor')} />;
   else if (examMatch) page = <ExamEditorPage examId={examMatch[1]!} onBack={() => navigate('/instructor/exams')} />;
   else if (onExams) page = <ExamsPage onOpen={(id) => navigate(`/instructor/exams/${id}`)} />;
+  else if (onProfessors && me?.isAdmin) page = <ProfessorsPage myId={me.id} />;
+  else if (onAccount && me) page = <AccountPage me={me} onChanged={refreshStatus} />;
   else page = <AttemptsPage onOpen={(id) => navigate(`/instructor/attempts/${id}`)} />;
 
   return (
@@ -74,8 +81,10 @@ export function InstructorApp() {
         <h1>Linux Lab · Instructor</h1>
         {status?.authenticated && (
           <nav className="instructor-nav" aria-label="Instructor">
-            {link('/instructor', 'Student attempts', !onExams)}
+            {link('/instructor', 'Student attempts', !onExams && !onProfessors && !onAccount)}
             {link('/instructor/exams', 'Exams', onExams)}
+            {me?.isAdmin && link('/instructor/professors', 'Professors', onProfessors)}
+            {link('/instructor/account', me ? `My account (${me.name})` : 'My account', onAccount)}
             <button type="button" className="secondary" onClick={() => void logout()}>
               Sign out
             </button>
@@ -88,7 +97,7 @@ export function InstructorApp() {
         {status && !status.enabled && (
           <p className="result result-error">
             Instructor access is not configured. Set <code>INSTRUCTOR_PASSWORD</code> (for example in the <code>.env</code>{' '}
-            file) and restart the server.
+            file) and restart the server. That creates the administrator account, with the username <code>admin</code>.
           </p>
         )}
         {status?.enabled && !status.authenticated && <LoginPage onSignedIn={refreshStatus} />}

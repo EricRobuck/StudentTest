@@ -36,8 +36,8 @@ export class ExamCatalog {
 
   constructor(private readonly repo: ExamRepository) {}
 
-  async load(): Promise<void> {
-    if ((await this.repo.list()).length === 0) await this.seedSampleExam();
+  async load(sampleOwnerId?: string): Promise<void> {
+    if ((await this.repo.list()).length === 0) await this.seedSampleExam(sampleOwnerId);
     // A verification can't still be running after a restart.
     for (const q of await this.repo.allQuestions()) {
       if (q.verification.status === 'running') {
@@ -75,11 +75,12 @@ export class ExamCatalog {
   }
 
   /** On a brand-new database: the MVP sample exam, approved and enabled. */
-  private async seedSampleExam(): Promise<void> {
+  private async seedSampleExam(ownerId: string | undefined): Promise<void> {
     const now = new Date().toISOString();
     const settings = config.sampleExamMode === 'exam' ? examModeSettings : sampleExam.settings;
     await this.repo.save({
       id: sampleExam.id,
+      ownerId: ownerId ?? null,
       title: sampleExam.title,
       description: sampleExam.description ?? null,
       settings,
@@ -130,6 +131,7 @@ export class ExamCatalog {
     if (questions.length === 0) return undefined;
     return {
       id: exam.id,
+      ownerId: exam.ownerId,
       title: exam.title,
       ...(exam.description ? { description: exam.description } : {}),
       settings: exam.settings,
@@ -139,8 +141,25 @@ export class ExamCatalog {
 
   // ----------------------------------------------------------- instructors
 
-  listExams(): ExamSummary[] {
-    return [...this.exams.values()].map((e) => this.summary(e));
+  /** One professor's tests. */
+  listExams(ownerId: string): ExamSummary[] {
+    return [...this.exams.values()].filter((e) => e.ownerId === ownerId).map((e) => this.summary(e));
+  }
+
+  ownerOf(examId: string): string | null | undefined {
+    return this.exams.get(examId)?.ownerId;
+  }
+
+  countOwnedBy(ownerId: string): number {
+    return [...this.exams.values()].filter((e) => e.ownerId === ownerId).length;
+  }
+
+  /** Closes a disabled professor's tests to new students. */
+  async closeTestsOf(ownerId: string): Promise<void> {
+    for (const e of await this.repo.list()) {
+      if (e.ownerId === ownerId && e.enabled) await this.repo.save({ ...e, enabled: false, updatedAt: new Date().toISOString() });
+    }
+    await this.refresh();
   }
 
   examDetail(id: string): ExamDetail | undefined {
@@ -161,11 +180,11 @@ export class ExamCatalog {
     return undefined;
   }
 
-  async createExam(title: string, settings: ExamSettings): Promise<string> {
+  async createExam(title: string, settings: ExamSettings, ownerId: string): Promise<string> {
     const now = new Date().toISOString();
     const id = `exam-${randomUUID().slice(0, 8)}`;
     // New exams start disabled: students only see them once the instructor enables them.
-    await this.repo.save({ id, title, description: null, settings, enabled: false, createdAt: now, updatedAt: now });
+    await this.repo.save({ id, ownerId, title, description: null, settings, enabled: false, createdAt: now, updatedAt: now });
     await this.refresh();
     return id;
   }

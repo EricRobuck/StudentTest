@@ -16,6 +16,8 @@ import type {
   ExamResultView,
   ExamType,
   HealthResponse,
+  InstructorAccountSummary,
+  InstructorMe,
   InstructorStatus,
   SessionResponse,
   StartSessionRequest,
@@ -120,8 +122,23 @@ export const api = {
 /** Instructor endpoints (separate cookie; the server refuses these for students). */
 export const instructorApi = {
   me: (signal?: AbortSignal) => request<InstructorStatus>('GET', '/api/instructor/me', { signal }),
-  login: (password: string) => request<void>('POST', '/api/instructor/login', { body: { password } }),
+  login: (username: string, password: string) => request<void>('POST', '/api/instructor/login', { body: { username, password } }),
   logout: () => request<void>('POST', '/api/instructor/logout'),
+
+  // My account
+  updateMyAccount: (body: { name: string; username: string }) => request<InstructorMe>('PUT', '/api/instructor/account', { body }),
+  changeMyPassword: (current: string, next: string) =>
+    request<void>('POST', '/api/instructor/account/password', { body: { current, next } }),
+
+  // Professors (administrator only)
+  accounts: () => request<InstructorAccountSummary[]>('GET', '/api/instructor/accounts'),
+  createAccount: (body: { name: string; username: string; password: string }) =>
+    request<InstructorAccountSummary>('POST', '/api/instructor/accounts', { body }),
+  resetAccountPassword: (id: string, password: string) =>
+    request<void>('POST', `/api/instructor/accounts/${encodeURIComponent(id)}/password`, { body: { password } }),
+  setAccountActive: (id: string, active: boolean) =>
+    request<void>('POST', `/api/instructor/accounts/${encodeURIComponent(id)}/active`, { body: { active } }),
+
   attempts: (signal?: AbortSignal) => request<AttemptSummary[]>('GET', '/api/instructor/attempts', { signal }),
   attempt: (id: string, signal?: AbortSignal) =>
     request<AttemptDetail>('GET', `/api/instructor/attempts/${encodeURIComponent(id)}`, { signal }),

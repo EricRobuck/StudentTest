@@ -6,9 +6,58 @@ import type { AnswerKey, AttemptEndReason, AttemptStatus, ExamType, ScoreView, V
 
 /** Response body of GET /api/instructor/me. */
 export interface InstructorStatus {
-  /** false when the server has no INSTRUCTOR_PASSWORD configured. */
+  /** false when no instructor account exists (INSTRUCTOR_PASSWORD was never set). */
   enabled: boolean;
   authenticated: boolean;
+  /** Who is signed in. */
+  me: InstructorMe | null;
+}
+
+export interface InstructorMe {
+  id: string;
+  username: string;
+  /** Shown to students next to this professor's tests. */
+  name: string;
+  /** May add professors, reset passwords and disable accounts. */
+  isAdmin: boolean;
+}
+
+/** One row of the administrator's Professors page. */
+export interface InstructorAccountSummary extends InstructorMe {
+  active: boolean;
+  testCount: number;
+}
+
+export const ACCOUNT_LIMITS = {
+  usernameMin: 3,
+  usernameMax: 40,
+  nameMax: 80,
+  passwordMin: 10,
+  passwordMax: 200,
+} as const;
+
+const USERNAME = /^[A-Za-z0-9._-]+$/;
+
+export type AccountFieldsCheck = { ok: true; value: { username: string; name: string } } | { ok: false; errors: string[] };
+
+export function validateAccountFields(username: unknown, name: unknown): AccountFieldsCheck {
+  const L = ACCOUNT_LIMITS;
+  const u = typeof username === 'string' ? username.trim() : '';
+  const n = typeof name === 'string' ? name.trim() : '';
+  const errors: string[] = [];
+  if (!n || n.length > L.nameMax) errors.push(`A name is required (at most ${L.nameMax} characters).`);
+  if (u.length < L.usernameMin || u.length > L.usernameMax || !USERNAME.test(u)) {
+    errors.push(`A username needs ${L.usernameMin} to ${L.usernameMax} letters, numbers, dots, dashes or underscores.`);
+  }
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { username: u, name: n } };
+}
+
+/** The problem with a new password, or null if it's fine. */
+export function validatePassword(password: unknown): string | null {
+  const L = ACCOUNT_LIMITS;
+  if (typeof password !== 'string' || password.length < L.passwordMin) return `A password needs at least ${L.passwordMin} characters.`;
+  if (password.length > L.passwordMax) return `A password can have at most ${L.passwordMax} characters.`;
+  return null;
 }
 
 export interface AttemptSummary {

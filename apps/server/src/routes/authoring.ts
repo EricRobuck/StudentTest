@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { config } from '../config.js';
 import { sendError } from '../http/errors.js';
-import { requireInstructor } from '../http/requireInstructor.js';
+import { instructorOf, requireInstructor } from '../http/requireInstructor.js';
 import { requireAllowedOrigin } from '../http/security.js';
 import { AuthoringError, type AuthoringService } from '../modules/authoring/authoringService.js';
 import type { InstructorAuth } from '../modules/instructor/instructorAuth.js';
@@ -22,6 +22,11 @@ export function authoringRouter(auth: InstructorAuth, authoring: AuthoringServic
         const v = req.params[key];
         if (v !== undefined && !ID.test(String(v))) return sendError(res, 400, 'BAD_REQUEST', 'Invalid id');
       }
+      // A professor reaches only their own tests; anyone else's look like they don't exist.
+      const examId = req.params.examId;
+      if (examId !== undefined && !authoring.ownsExam(String(examId), instructorOf(res).id)) {
+        return sendError(res, 404, 'AUTHORING', 'Exam not found');
+      }
       try {
         const body = await fn(req, res);
         if (status === 204) res.status(204).end();
@@ -37,8 +42,8 @@ export function authoringRouter(auth: InstructorAuth, authoring: AuthoringServic
   router.get('/instructor/ai', instructorOnly, handle(() => authoring.aiStatus()));
   router.post('/instructor/exams/:examId/generate', ...write, handle((req) => authoring.generate(p(req, 'examId'), req.body)));
 
-  router.get('/instructor/exams', instructorOnly, handle(() => authoring.listExams()));
-  router.post('/instructor/exams', ...write, handle((req) => authoring.createExam((req.body as { title?: unknown })?.title, (req.body as { examType?: unknown })?.examType), 201));
+  router.get('/instructor/exams', instructorOnly, handle((_req, res) => authoring.listExams(instructorOf(res).id)));
+  router.post('/instructor/exams', ...write, handle((req, res) => authoring.createExam((req.body as { title?: unknown })?.title, (req.body as { examType?: unknown })?.examType, instructorOf(res).id), 201));
   router.get('/instructor/exams/:examId', instructorOnly, handle((req) => authoring.examDetail(p(req, 'examId'))));
   router.put('/instructor/exams/:examId', ...write, handle((req) => authoring.updateExam(p(req, 'examId'), req.body)));
   router.delete('/instructor/exams/:examId', ...write, handle((req) => authoring.deleteExam(p(req, 'examId')), 204));

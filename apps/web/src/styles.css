@@ -1059,3 +1059,14 @@ ul.plain {
 .test-stats {
   margin-bottom: 1rem;
 }
+
+/* Start screen: tests grouped by professor */
+.test-group {
+  margin-bottom: 0.75rem;
+}
+
+.test-professor {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}

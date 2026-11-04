@@ -19,10 +19,12 @@ export class InstructorService {
     private readonly examFor: (attempt: AttemptRecord) => ExamDefinition | undefined,
   ) {}
 
-  async listAttempts(): Promise<AttemptSummary[]> {
+  /** One professor's attempts: never another professor's students. */
+  async listAttempts(ownerId: string): Promise<AttemptSummary[]> {
     await this.attempts.expireOverdue(); // show accurate statuses
     const summaries: AttemptSummary[] = [];
     for (const attempt of await this.repos.attempts.listAll()) {
+      if (attempt.ownerId !== ownerId) continue;
       const exam = this.examFor(attempt);
       if (!exam) continue;
       const [work, commands, events] = await Promise.all([

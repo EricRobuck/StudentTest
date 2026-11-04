@@ -17,6 +17,7 @@ import type {
   Repositories,
   SessionRecord,
   SubmissionRecord,
+  InstructorRecord,
 } from './repositories.js';
 
 type Row = Record<string, unknown>;
@@ -40,12 +41,26 @@ function toAttempt(r: Row): AttemptRecord {
     examSnapshot: r.exam_snapshot ? (JSON.parse(str(r.exam_snapshot)) as unknown) : null,
     lockedAt: strOrNull(r.locked_at),
     lockReason: strOrNull(r.lock_reason),
+    ownerId: strOrNull(r.owner_id),
+  };
+}
+
+function toInstructor(r: Row): InstructorRecord {
+  return {
+    id: str(r.id),
+    username: str(r.username),
+    name: str(r.name),
+    passwordHash: str(r.password_hash),
+    isAdmin: Number(r.is_admin) === 1,
+    active: Number(r.active) === 1,
+    createdAt: str(r.created_at),
   };
 }
 
 function toExam(r: Row): ExamRecord {
   return {
     id: str(r.id),
+    ownerId: strOrNull(r.owner_id),
     title: str(r.title),
     description: strOrNull(r.description),
     settings: JSON.parse(str(r.settings)) as ExamSettings,
@@ -103,8 +118,8 @@ export function createSqliteRepositories(db: Database): Repositories {
         inTransaction(db, () => {
           db.prepare(
             `INSERT INTO exam_attempts (id, exam_id, student_id, student_name, class_name, status, end_reason,
-               started_at, deadline_at, completed_at, current_question_id, exam_snapshot)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               started_at, deadline_at, completed_at, current_question_id, exam_snapshot, owner_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
             a.id,
             a.examId,
@@ -118,6 +133,7 @@ export function createSqliteRepositories(db: Database): Repositories {
             a.completedAt,
             a.currentQuestionId,
             a.examSnapshot === null ? null : JSON.stringify(a.examSnapshot),
+            a.ownerId,
           );
           const insertQuestion = db.prepare(
             `INSERT INTO attempt_questions (attempt_id, question_id, position, max_points, variables)
@@ -344,6 +360,32 @@ export function createSqliteRepositories(db: Database): Repositories {
       },
     },
 
+    instructors: {
+      async list() {
+        return db.prepare('SELECT * FROM instructors ORDER BY created_at').all().map(toInstructor);
+      },
+      async get(id) {
+        const row = db.prepare('SELECT * FROM instructors WHERE id = ?').get(id);
+        return row ? toInstructor(row) : undefined;
+      },
+      async findByUsername(username) {
+        const row = db.prepare('SELECT * FROM instructors WHERE username = ?').get(username);
+        return row ? toInstructor(row) : undefined;
+      },
+      async save(a) {
+        db.prepare(
+          `INSERT INTO instructors (id, username, name, password_hash, is_admin, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET username = excluded.username, name = excluded.name,
+             password_hash = excluded.password_hash, is_admin = excluded.is_admin, active = excluded.active`,
+        ).run(a.id, a.username, a.name, a.passwordHash, a.isAdmin ? 1 : 0, a.active ? 1 : 0, a.createdAt);
+      },
+      async adoptOwnerless(ownerId) {
+        inTransaction(db, () => {
+          db.prepare('UPDATE exams SET owner_id = ? WHERE owner_id IS NULL').run(ownerId);
+          db.prepare('UPDATE exam_attempts SET owner_id = ? WHERE owner_id IS NULL').run(ownerId);
+        });
+      },
+    },
     exams: {
       async list() {
         return db.prepare('SELECT * FROM exams ORDER BY created_at').all().map(toExam);
@@ -354,10 +396,10 @@ export function createSqliteRepositories(db: Database): Repositories {
       },
       async save(e) {
         db.prepare(
-          `INSERT INTO exams (id, title, description, settings, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO exams (id, owner_id, title, description, settings, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET title = excluded.title, description = excluded.description,
              settings = excluded.settings, enabled = excluded.enabled, updated_at = excluded.updated_at`,
-        ).run(e.id, e.title, e.description, JSON.stringify(e.settings), e.enabled ? 1 : 0, e.createdAt, e.updatedAt);
+        ).run(e.id, e.ownerId, e.title, e.description, JSON.stringify(e.settings), e.enabled ? 1 : 0, e.createdAt, e.updatedAt);
       },
       async delete(id) {
         db.prepare('DELETE FROM exams WHERE id = ?').run(id); // questions cascade

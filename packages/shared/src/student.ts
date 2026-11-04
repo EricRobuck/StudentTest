@@ -27,6 +27,8 @@ export interface OpenExam {
   /** The test locks if the student leaves the test screen. */
   lockOnLeave: boolean;
   examType: 'linux' | 'written';
+  /** The professor giving this test. */
+  professor: string;
 }
 
 /** Response body of GET /api/start-options. */

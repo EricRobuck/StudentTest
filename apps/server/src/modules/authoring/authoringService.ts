@@ -100,8 +100,12 @@ export class AuthoringService {
     }
   }
 
-  listExams(): ExamSummary[] {
-    return this.catalog.listExams();
+  listExams(ownerId: string): ExamSummary[] {
+    return this.catalog.listExams(ownerId);
+  }
+
+  ownsExam(examId: string, ownerId: string): boolean {
+    return this.catalog.ownerOf(examId) === ownerId;
   }
 
   examDetail(id: string): ExamDetail {
@@ -110,10 +114,10 @@ export class AuthoringService {
     return exam;
   }
 
-  async createExam(title: unknown, examType?: unknown): Promise<ExamDetail> {
+  async createExam(title: unknown, examType: unknown, ownerId: string): Promise<ExamDetail> {
     const t = typeof title === 'string' ? title.trim() : '';
     if (!t || t.length > 120) throw new AuthoringError(400, 'Exam title is required (max 120 characters).');
-    const id = await this.catalog.createExam(t, examType === 'written' ? writtenSettings : practiceSettings);
+    const id = await this.catalog.createExam(t, examType === 'written' ? writtenSettings : practiceSettings, ownerId);
     return this.examDetail(id);
   }
 

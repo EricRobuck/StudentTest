@@ -9,6 +9,7 @@ import type { ContainerRuntime } from './modules/containers/index.js';
 import type { InstructorAuth } from './modules/instructor/instructorAuth.js';
 import type { InstructorService } from './modules/instructor/instructorService.js';
 import type { SessionManager } from './modules/sessions/sessionManager.js';
+import { accountsRouter } from './routes/accounts.js';
 import { attemptRouter } from './routes/attempt.js';
 import { authoringRouter } from './routes/authoring.js';
 import { examRouter } from './routes/exam.js';
@@ -41,10 +42,11 @@ export function createApp({ runtime, sessions, attempts, instructorAuth, instruc
 
   const limiters = createLimiters(config.security.rateLimits);
   app.use('/api', healthRouter(runtime));
-  app.use('/api', sessionRouter(sessions, attempts, limiters));
+  app.use('/api', sessionRouter(sessions, attempts, limiters, instructorAuth));
   app.use('/api', examRouter({ sessions, attempts, runtime, limiters }));
   app.use('/api', attemptRouter(sessions, attempts, limiters));
   app.use('/api', instructorRouter(instructorAuth, instructor, attempts, deleteAttempt));
+  app.use('/api', accountsRouter(instructorAuth));
   app.use('/api', authoringRouter(instructorAuth, authoring));
 
   // The backend only serves /api and /ws. Anyone who opens it directly in a
