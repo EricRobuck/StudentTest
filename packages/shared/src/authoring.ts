@@ -184,7 +184,8 @@ export const AUTHORING_LIMITS = {
   answerMax: 500,
   shortAnswerMax: 5000,
   rubricMax: 2000,
-  topicMax: 500,
+  /** Effectively unlimited: room to paste a whole chapter or set of notes. */
+  topicMax: 100_000,
   notesMax: 1000,
 } as const;
 

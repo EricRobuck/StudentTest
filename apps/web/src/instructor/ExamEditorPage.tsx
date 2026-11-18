@@ -445,8 +445,7 @@ function GeneratePanel({ examId, ai, written, onDone }: { examId: string; ai: Ai
         <label>
           What should the questions cover?
           <textarea
-            rows={2}
-            maxLength={500}
+            rows={6}
             placeholder={written ? 'e.g. the parts of a computer and what each one does' : 'e.g. file permissions with chmod, including numeric modes and making a script executable'}
             value={topic}
             onChange={(e) => setTopic(e.target.value)}

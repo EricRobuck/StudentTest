@@ -36,7 +36,7 @@ export function createApp({ runtime, sessions, attempts, instructorAuth, instruc
   app.set('trust proxy', config.security.trustProxy);
   app.use(securityHeaders);
   // Question editing (setup files) needs more room; the parser that runs first wins.
-  app.use('/api/instructor/exams', express.json({ limit: '256kb' }));
+  app.use('/api/instructor/exams', express.json({ limit: '1mb' }));
   // Student endpoints never need more than a few hundred bytes of JSON.
   app.use(express.json({ limit: '16kb' }));
 
