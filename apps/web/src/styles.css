@@ -1129,3 +1129,19 @@ ul.plain {
 .choice-bars li {
   margin-bottom: 0.5rem;
 }
+
+/* Full screen required: covers the test until the student goes back */
+.fullscreen-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--bg);
+}
+
+.fullscreen-gate .locked-card {
+  border-color: var(--accent);
+}

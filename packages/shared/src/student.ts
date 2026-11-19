@@ -26,6 +26,8 @@ export interface OpenExam {
   mode: 'practice' | 'exam';
   /** The test locks if the student leaves the test screen. */
   lockOnLeave: boolean;
+  /** The test is only shown in full screen. */
+  requireFullscreen: boolean;
   examType: 'linux' | 'written';
   /** The professor giving this test. */
   professor: string;

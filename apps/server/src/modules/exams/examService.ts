@@ -109,6 +109,7 @@ export function toStudentExam(exam: ExamDefinition, attemptId: string): StudentE
       showScoreDuringExam: s.showScoreDuringExam,
       lockAfterSubmit: s.lockAfterSubmit,
       lockOnLeave: s.lockOnLeave !== false,
+      requireFullscreen: s.requireFullscreen !== false,
       limitedTries: usesLimitedTries(s),
       partialCredit: s.partialCredit !== false,
     },

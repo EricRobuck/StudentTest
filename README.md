@@ -121,6 +121,12 @@ question, whether written by hand or by AI, is test-run in a sandbox and needs
 your approval before students see it. Make an exam **active** to give it to
 students.
 
+**Full screen.** By default a test only shows while the student's browser is in
+full screen (it switches when they click Start test). Leaving full screen counts
+as leaving the screen and locks the test. Turn it off per exam in **Exam
+settings** ("Students must take the test in full screen"). Phones that can't go
+full screen, like iPhones, are let through.
+
 ## Two types of test
 
 Choose the type when you create a test under **Exams**. It can't be changed later.

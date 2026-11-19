@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AttemptView, ExamResultView, StudentExam, SubmitResult } from '@linuxlab/shared';
 import { api } from './api/client';
 import { BackendStatus } from './components/BackendStatus';
@@ -10,6 +10,7 @@ import { ResultsView } from './components/ResultsView';
 import { StartScreen } from './components/StartScreen';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useExamSession } from './hooks/useExamSession';
+import { enterFullscreen, exitFullscreen, useFullscreenGate } from './hooks/useFullscreen';
 import { useLeaveDetection, withLeaveDetectionPaused } from './hooks/useLeaveDetection';
 import { WrittenExam } from './components/WrittenExam';
 import { TerminalView } from './terminal/TerminalView';
@@ -34,7 +35,7 @@ export function App() {
   // A leave the server hasn't confirmed yet (e.g. the Wi-Fi dropped). The lock
   // screen keeps re-sending it, so a lost connection can't hide leaving.
   const pendingLeave = useRef<string | null>(null);
-  useLeaveDetection(inProgress && state.exam.rules.lockOnLeave && !locked, (reason, closing) => {
+  const reportLeft = (reason: string, closing: boolean) => {
     pendingLeave.current = reason;
     if (!closing) markLocked(); // cover the screen right away; the server confirms below
     api
@@ -44,7 +45,20 @@ export function App() {
         updateAttempt(() => attempt);
       })
       .catch(() => undefined);
+  };
+  useLeaveDetection(inProgress && state.exam.rules.lockOnLeave && !locked, reportLeft);
+
+  // Full screen: the test only shows while the browser fills the screen.
+  // Leaving full screen counts as leaving the test screen.
+  const needsFullscreen = inProgress && state.exam.rules.requireFullscreen && !locked;
+  const { inFullscreen } = useFullscreenGate(needsFullscreen, () => {
+    if (state.kind === 'in_progress' && state.exam.rules.lockOnLeave) reportLeft('left full screen', false);
   });
+  // The results and start screens don't need full screen.
+  useEffect(() => {
+    if (!inProgress) exitFullscreen();
+  }, [inProgress]);
+
   const onLockChanged = useCallback(
     (attempt: AttemptView) => {
       if (attempt.status !== 'in_progress') reload();
@@ -56,6 +70,7 @@ export function App() {
 
   return (
     <div className="exam-layout">
+      {needsFullscreen && !inFullscreen && <FullscreenGate lockOnLeave={state.exam.rules.lockOnLeave} />}
       <header className="exam-header">
         <div>
           <h1>{state.kind === 'in_progress' ? state.exam.title : 'Linux Practical Exam'}</h1>
@@ -156,6 +171,28 @@ export function App() {
       <footer className="exam-footer">
         <BackendStatus health={health} />
       </footer>
+    </div>
+  );
+}
+
+/** Covers the test until the student goes back to full screen. */
+function FullscreenGate({ lockOnLeave }: { lockOnLeave: boolean }) {
+  return (
+    <div className="fullscreen-gate" role="dialog" aria-modal="true" aria-labelledby="fullscreen-title">
+      <div className="locked-card">
+        <div className="locked-icon" aria-hidden="true">
+          ⛶
+        </div>
+        <h2 id="fullscreen-title">This test needs full screen</h2>
+        <p>The test only shows while your browser fills the whole screen.</p>
+        <button type="button" onClick={() => void enterFullscreen()}>
+          Go to full screen and continue
+        </button>
+        <p className="muted small">
+          Stay in full screen until you finish.{' '}
+          {lockOnLeave && 'Leaving it (with Esc or F11) locks your test, and you will have to call your instructor over.'}
+        </p>
+      </div>
     </div>
   );
 }

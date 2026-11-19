@@ -5,6 +5,11 @@ const BLUR_GRACE_MS = 1000;
 
 let pausedUntil = 0;
 
+/** True while a browser dialog is open (or just closed), when leaving doesn't count. */
+export function isLeaveDetectionPaused(): boolean {
+  return Date.now() < pausedUntil;
+}
+
 /**
  * Runs `fn` (e.g. window.confirm) without it counting as leaving the test:
  * browser dialogs take focus away from the page.

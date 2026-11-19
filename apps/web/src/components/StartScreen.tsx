@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { STUDENT_LIMITS, validateStudentInfo, type StartOptionsResponse, type StudentInfo } from '@linuxlab/shared';
 import { api } from '../api/client';
+import { enterFullscreen } from '../hooks/useFullscreen';
 
 type FieldErrors = Partial<Record<keyof StudentInfo | 'examId', string>>;
 
@@ -47,6 +48,8 @@ export function StartScreen({ onStarted, initial }: StartScreenProps) {
     if (!examId) next.examId = 'Please choose a test.';
     setErrors(next);
     if (!checked.ok || !examId) return;
+    // Going full screen is only allowed in answer to a click, so do it now.
+    if (options?.exams.find((x) => x.id === examId)?.requireFullscreen) void enterFullscreen();
     setStarting(true);
     try {
       await api.startSession({ ...checked.value, examId });
@@ -161,6 +164,12 @@ export function StartScreen({ onStarted, initial }: StartScreenProps) {
         )}
       </fieldset>
 
+      {options.exams.find((e) => e.id === examId)?.requireFullscreen && (
+        <p className="result result-warning">
+          <strong>This test runs in full screen.</strong> When you click Start test, your browser fills the screen. Stay in
+          full screen until you finish.
+        </p>
+      )}
       {options.exams.find((e) => e.id === examId)?.lockOnLeave && (
         <p className="result result-warning">
           <strong>Stay on the test screen.</strong> Once you start, do not switch tabs, open other windows or apps, or

@@ -642,6 +642,21 @@ function SettingsEditor({
             locks the test. The student must call you over, and you unlock it from Student attempts.
           </p>
         </div>
+        <div className="sudo-setting">
+          <label>
+            <input
+              type="checkbox"
+              checked={s.requireFullscreen !== false}
+              onChange={(e) => setS({ ...s, requireFullscreen: e.target.checked })}
+            />{' '}
+            Students must take the test in full screen
+          </label>
+          <p className="muted small">
+            The test only shows while the browser fills the whole screen. Leaving full screen (Esc or F11) counts as leaving
+            the screen: with the setting above it locks the test, otherwise the test is hidden until they go back. Phones
+            that can't go full screen (iPhone) are let through.
+          </p>
+        </div>
         {!written && (
         <div className="sudo-setting">
           <label>

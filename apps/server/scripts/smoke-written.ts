@@ -78,6 +78,7 @@ async function main(): Promise<void> {
   const view = await s.call<StudentExam>('GET', '/api/exam');
   const raw = JSON.stringify(view.body);
   report(view.body.examType === 'written' && view.body.questions.find((x) => x.id === qm.id)?.answerFormat?.type === 'multiple_choice', 'Student gets the test and the choices');
+  report(view.body.rules.requireFullscreen === true, 'Full screen is required by default');
   report(!raw.includes('correctIndex') && !raw.includes('accepted') && !raw.includes(SECRET_ANSWER) && !raw.includes('Never shown'), 'Correct answers are not sent to the student', raw);
 
   const term = openTerminal(base, { Origin: ORIGIN, Cookie: s.cookie });

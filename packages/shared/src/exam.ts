@@ -185,6 +185,8 @@ export interface StudentExamRules {
   lockAfterSubmit: boolean;
   /** Leaving the test screen locks the test until the instructor unlocks it. */
   lockOnLeave: boolean;
+  /** The test is only shown in full screen. */
+  requireFullscreen: boolean;
   /** A fixed number of tries per question (TRIES_PER_QUESTION), full points on any of them. */
   limitedTries: boolean;
   /** Once a question is final, partial credit for the checks that passed. */

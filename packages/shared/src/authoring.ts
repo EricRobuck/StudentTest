@@ -27,6 +27,11 @@ export interface ExamSettings {
    */
   lockOnLeave?: boolean;
   /**
+   * The test is only shown in full screen. Leaving full screen counts as
+   * leaving the test (locks it, if lockOnLeave is on). Missing = true.
+   */
+  requireFullscreen?: boolean;
+  /**
    * TRIES_PER_QUESTION tries per question. A correct answer on any try earns
    * full points; after the last try the question closes. Missing = true.
    */
@@ -417,6 +422,7 @@ export function validateExamSettings(input: unknown): SettingsCheck {
     lockAfterSubmit: raw.lockAfterSubmit === true,
     allowSudo: raw.allowSudo === true,
     lockOnLeave: raw.lockOnLeave !== false,
+    requireFullscreen: raw.requireFullscreen !== false,
     limitedTries: (raw.limitedTries ?? raw.threeTries) !== false,
     partialCredit: raw.partialCredit !== false,
     examType: raw.examType === 'written' ? 'written' : 'linux',
